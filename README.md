@@ -26,6 +26,14 @@ video list, it means your local SQLite database is missing the latest schema cha
 python manage.py createsuperuser
 ```
 
+## Seed demo content
+
+Create a sample audio track and generated video for local testing or UI demos:
+
+```bash
+python manage.py create_sample_video
+```
+
 ## Run dev server
 
 ```bash
