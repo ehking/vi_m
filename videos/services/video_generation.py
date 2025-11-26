@@ -35,11 +35,26 @@ def _load_moviepy():
 
     # moviepy >=2.0 does not expose ``editor`` at the top level, so we
     # import the submodule directly to ensure compatibility across
-    # versions.
+    # versions. If MoviePy is not installed (or installed without the
+    # editor extras) we surface a helpful error for the caller to handle
+    # gracefully.
     try:
         import moviepy.editor as moviepy_editor  # type: ignore
-    except ImportError:
-        from moviepy import editor as moviepy_editor  # type: ignore
+    except Exception:
+        try:
+            from moviepy import editor as moviepy_editor  # type: ignore
+        except Exception as exc:
+            raise VideoGenerationError(
+                "MoviePy is not available. Install the 'moviepy' package to enable video generation.",
+                code="moviepy_missing",
+            ) from exc
+
+    missing_attrs = [name for name in ("AudioFileClip", "ColorClip") if not hasattr(moviepy_editor, name)]
+    if missing_attrs:
+        raise VideoGenerationError(
+            "MoviePy installation is incomplete; reinstall the 'moviepy' package to restore editor components.",
+            code="moviepy_incomplete",
+        )
 
     return moviepy_editor
 
