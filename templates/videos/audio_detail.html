@@ -7,6 +7,10 @@
         <p class="text-muted mb-0">{{ audio.artist|default:'Unknown artist' }}</p>
     </div>
     <div class="btn-group">
+        <form method="post" action="{% url 'audio-generate-video' audio.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success btn-sm">Generate AI Video</button>
+        </form>
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'audio-edit' audio.pk %}">Edit</a>
         <a class="btn btn-outline-danger btn-sm" href="{% url 'audio-delete' audio.pk %}">Delete</a>
     </div>

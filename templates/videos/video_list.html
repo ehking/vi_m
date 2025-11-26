@@ -29,6 +29,11 @@
         <button class="btn btn-outline-secondary w-100" type="submit">Filter</button>
     </div>
 </form>
+<div class="mb-3">
+    {% for status in status_counts %}
+        <span class="badge bg-{{ status.badge }} me-1">{{ status.label }}: {{ status.total }}</span>
+    {% endfor %}
+</div>
 <div class="table-responsive">
     <table class="table table-striped align-middle">
         <thead>
@@ -36,6 +41,7 @@
                 <th>Title</th>
                 <th>Audio</th>
                 <th>Status</th>
+                <th>Progress</th>
                 <th>Mood</th>
                 <th>Updated</th>
                 <th></th>
@@ -46,7 +52,8 @@
                 <tr>
                     <td><a href="{% url 'video-detail' video.pk %}">{{ video.title }}</a></td>
                     <td>{{ video.audio_track }}</td>
-                    <td>{{ video.get_status_display }}</td>
+                    <td><span class="badge bg-{{ video.status_badge_class }}">{{ video.get_status_display }}</span></td>
+                    <td>{% if video.generation_progress is not None %}{{ video.generation_progress }}%{% else %}-{% endif %}</td>
                     <td>{{ video.get_mood_display|default:'-' }}</td>
                     <td>{{ video.updated_at|date:'Y-m-d H:i' }}</td>
                     <td class="text-end">
@@ -54,7 +61,7 @@
                     </td>
                 </tr>
             {% empty %}
-                <tr><td colspan="6" class="text-center">No videos found.</td></tr>
+                <tr><td colspan="7" class="text-center">No videos found.</td></tr>
             {% endfor %}
         </tbody>
     </table>

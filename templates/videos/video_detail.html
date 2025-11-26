@@ -5,6 +5,7 @@
     <div>
         <h1 class="h4 mb-0">{{ video.title }}</h1>
         <p class="text-muted mb-0">{{ video.audio_track }}</p>
+        <span class="badge bg-{{ video.status_badge_class }}">{{ video.get_status_display }}</span>
     </div>
     <div class="btn-group">
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'video-edit' video.pk %}">Edit</a>
@@ -33,7 +34,20 @@
                 <tr><th>Model</th><td>{{ video.model_name|default:'-' }}</td></tr>
                 <tr><th>Seed</th><td>{{ video.seed|default:'-' }}</td></tr>
                 <tr><th>Generation Time (ms)</th><td>{{ video.generation_time_ms|default:'-' }}</td></tr>
-                <tr><th>Generation Progress</th><td>{{ video.generation_progress }}%</td></tr>
+                <tr>
+                    <th>Generation Progress</th>
+                    <td>
+                        {% if video.generation_progress is not None %}
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-{{ video.status_badge_class }}" role="progressbar" style="width: {{ video.generation_progress }}%;" aria-valuenow="{{ video.generation_progress }}" aria-valuemin="0" aria-valuemax="100">
+                                    {{ video.generation_progress }}%
+                                </div>
+                            </div>
+                        {% else %}
+                            <span class="text-muted">Not started</span>
+                        {% endif %}
+                    </td>
+                </tr>
                 <tr><th>Error Code</th><td>{{ video.error_code|default:'-' }}</td></tr>
                 <tr><th>Error Message</th><td>{{ video.error_message|default:'-' }}</td></tr>
             </table>
@@ -58,6 +72,23 @@
                 {% else %}
                     <p class="mb-0 text-muted">No thumbnail available.</p>
                 {% endif %}
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">Update Status</div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary w-100">Save Changes</button>
+                </form>
             </div>
         </div>
     </div>

@@ -14,6 +14,7 @@ urlpatterns = [
     path('audio/', views.AudioTrackListView.as_view(), name='audio-list'),
     path('audio/create/', views.AudioTrackCreateView.as_view(), name='audio-create'),
     path('audio/<int:pk>/', views.AudioTrackDetailView.as_view(), name='audio-detail'),
+    path('audio/<int:pk>/generate/', views.GenerateAIVideoView.as_view(), name='audio-generate-video'),
     path('audio/<int:pk>/edit/', views.AudioTrackUpdateView.as_view(), name='audio-edit'),
     path('audio/<int:pk>/delete/', views.AudioTrackDeleteView.as_view(), name='audio-delete'),
     path('projects/', views.VideoProjectListView.as_view(), name='project-list'),

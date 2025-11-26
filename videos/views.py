@@ -3,8 +3,9 @@ from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import redirect
-from django.urls import reverse_lazy
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse, reverse_lazy
+from django.views import View
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -13,8 +14,14 @@ from django.views.generic import (
     TemplateView,
     UpdateView,
 )
+from django.views.generic.edit import FormMixin
 
-from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
+from .forms import (
+    AudioTrackForm,
+    GeneratedVideoForm,
+    GeneratedVideoStatusForm,
+    VideoProjectForm,
+)
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
 
 
@@ -23,6 +30,22 @@ def _activity_user(request):
     if user and getattr(user, "is_authenticated", False):
         return user
     return None
+
+
+def _status_summary():
+    summary = {
+        key: {
+            "key": key,
+            "label": label,
+            "total": 0,
+            "badge": GeneratedVideo.STATUS_BADGE_CLASSES.get(key, "secondary"),
+        }
+        for key, label in GeneratedVideo.STATUS_CHOICES
+    }
+    for row in GeneratedVideo.objects.values('status').annotate(total=Count('id')):
+        if row['status'] in summary:
+            summary[row['status']]['total'] = row['total']
+    return list(summary.values())
 
 
 class StaffRequiredMixin(UserPassesTestMixin):
@@ -42,7 +65,7 @@ class DashboardView(TemplateView):
         try:
             videos = GeneratedVideo.objects.all()
             context['total_videos'] = videos.count()
-            context['status_counts'] = list(videos.values('status').annotate(total=Count('id')))
+            context['status_counts'] = _status_summary()
             context['mood_counts'] = list(videos.values('mood').annotate(total=Count('id')))
             context['total_audio'] = AudioTrack.objects.count()
             context['total_projects'] = VideoProject.objects.count()
@@ -95,12 +118,48 @@ class GeneratedVideoListView(ListView):
             return GeneratedVideo.objects.none()
         return queryset
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['status_counts'] = _status_summary()
+        return context
 
 
-class GeneratedVideoDetailView(DetailView):
+
+class GeneratedVideoDetailView(FormMixin, DetailView):
     model = GeneratedVideo
     template_name = 'videos/video_detail.html'
     context_object_name = 'video'
+    form_class = GeneratedVideoStatusForm
+
+    def get_success_url(self):
+        return reverse('video-detail', kwargs={'pk': self.object.pk})
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['instance'] = self.get_object()
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form'] = context.get('form') or self.get_form()
+        return context
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = self.get_form()
+        if form.is_valid():
+            form.save()
+            ActivityLog.objects.create(
+                user=_activity_user(request),
+                action='update_video_status',
+                object_type='GeneratedVideo',
+                object_id=self.object.id,
+                description=f"Updated status details for video {self.object.title}",
+            )
+            messages.success(request, 'Video status updated successfully.')
+            return redirect(self.get_success_url())
+        context = self.get_context_data(form=form)
+        return self.render_to_response(context)
 
 
 class GeneratedVideoCreateView(CreateView):
@@ -321,3 +380,23 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
         )
         messages.success(request, 'Project deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
+class GenerateAIVideoView(View):
+    def post(self, request, *args, **kwargs):
+        audio = get_object_or_404(AudioTrack, pk=kwargs['pk'])
+        title = f"{audio.title} AI Video"
+        video = GeneratedVideo.objects.create(
+            audio_track=audio,
+            title=title,
+            status='pending',
+        )
+        ActivityLog.objects.create(
+            user=_activity_user(request),
+            action='generate_video',
+            object_type='GeneratedVideo',
+            object_id=video.id,
+            description=f"Queued AI video generation for audio {audio.title}",
+        )
+        messages.success(request, 'AI video generation requested. You will see updates here as it progresses.')
+        return redirect('video-detail', pk=video.pk)

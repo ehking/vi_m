@@ -34,8 +34,8 @@
             <ul class="list-group list-group-flush">
                 {% for status in status_counts %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                        {{ status.status|title }}
-                        <span class="badge bg-primary rounded-pill">{{ status.total }}</span>
+                        {{ status.label }}
+                        <span class="badge bg-{{ status.badge }} rounded-pill">{{ status.total }}</span>
                     </li>
                 {% empty %}
                     <li class="list-group-item">No video data yet.</li>
