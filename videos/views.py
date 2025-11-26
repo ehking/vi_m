@@ -1,10 +1,13 @@
 import os
+from pathlib import Path
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import redirect
+from django.conf import settings
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
+from django.views.decorators.http import require_POST
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -101,6 +104,104 @@ class GeneratedVideoDetailView(DetailView):
     model = GeneratedVideo
     template_name = 'videos/video_detail.html'
     context_object_name = 'video'
+
+
+@require_POST
+def video_generate(request, pk):
+    video = get_object_or_404(GeneratedVideo, pk=pk)
+    redirect_url = redirect('video-detail', pk=pk)
+
+    video.status = 'processing'
+    video.error_message = ''
+    video.generation_progress = 0
+    video.save(update_fields=['status', 'error_message', 'generation_progress', 'updated_at'])
+
+    try:
+        audio_file = video.audio_track.audio_file
+        if not audio_file:
+            raise ValueError('Audio file is missing for this track.')
+        if not hasattr(audio_file, 'path') or not os.path.exists(audio_file.path):
+            raise ValueError('Audio file path is invalid or the file does not exist.')
+
+        from moviepy.editor import AudioFileClip, ColorClip, CompositeVideoClip, ImageClip
+        from PIL import Image, ImageDraw, ImageFont
+        import numpy as np
+
+        audio_path = Path(audio_file.path)
+        output_dir = Path(settings.MEDIA_ROOT) / 'videos'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_name = f'generated_{video.pk}.mp4'
+        output_path = output_dir / output_name
+
+        with AudioFileClip(str(audio_path)) as audio_clip:
+            duration = audio_clip.duration or 0
+            duration_seconds = int(duration)
+
+            background = ColorClip(size=(1280, 720), color=(0, 0, 0), duration=duration)
+
+            text_lines = [video.title or video.audio_track.title]
+            first_line = ''
+            if video.audio_track.lyrics:
+                first_line = video.audio_track.lyrics.strip().splitlines()[0]
+            if first_line:
+                text_lines.append(first_line)
+            text_content = "\n".join(filter(None, text_lines)) or "Generated Video"
+
+            img = Image.new('RGBA', (1280, 720), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(img)
+            font = ImageFont.load_default()
+            bbox = draw.multiline_textbbox((0, 0), text_content, font=font, align='center')
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            position = ((img.width - text_width) // 2, (img.height - text_height) // 2)
+            draw.multiline_text(position, text_content, font=font, fill=(255, 255, 255, 230), align='center')
+
+            text_clip = ImageClip(np.array(img)).set_duration(duration)
+
+            composite = CompositeVideoClip([background, text_clip]).set_audio(audio_clip)
+            composite.write_videofile(
+                str(output_path),
+                fps=24,
+                codec='libx264',
+                audio_codec='aac',
+                verbose=False,
+                logger=None,
+            )
+
+            composite.close()
+            background.close()
+            text_clip.close()
+
+        video.video_file.name = f'videos/{output_name}'
+        video.duration_seconds = duration_seconds
+        video.file_size_bytes = os.path.getsize(output_path) if output_path.exists() else None
+        video.generation_progress = 100
+        video.status = 'ready'
+        video.save(update_fields=[
+            'video_file',
+            'duration_seconds',
+            'file_size_bytes',
+            'generation_progress',
+            'status',
+            'updated_at',
+        ])
+
+        ActivityLog.objects.create(
+            user=_activity_user(request),
+            action='generate_video',
+            object_type='GeneratedVideo',
+            object_id=video.id,
+            description=f"Generated video {video.title}",
+        )
+        messages.success(request, 'Video generated successfully.')
+    except Exception as exc:
+        video.status = 'failed'
+        video.error_message = str(exc)
+        video.generation_progress = 0
+        video.save(update_fields=['status', 'error_message', 'generation_progress', 'updated_at'])
+        messages.error(request, f'Failed to generate video: {exc}')
+
+    return redirect_url
 
 
 class GeneratedVideoCreateView(CreateView):
