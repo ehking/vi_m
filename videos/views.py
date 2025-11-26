@@ -38,23 +38,25 @@ STATUS_BADGE_CLASSES = GeneratedVideo.STATUS_BADGE_CLASSES
 
 
 def _status_summary():
+    """Return ordered status summary with labels, badges, and totals."""
     try:
         status_totals = GeneratedVideo.objects.values("status").annotate(total=Count("id"))
     except OperationalError:
         return []
 
     labels = dict(GeneratedVideo.STATUS_CHOICES)
+    status_order = ["ready", "processing", "pending", "failed", "draft", "archived"]
+    status_map = {row["status"]: row["total"] for row in status_totals}
+
     return [
         {
-            "key": row["status"],
-            "label": labels.get(row["status"], row["status"].title()),
-            "badge": STATUS_BADGE_CLASSES.get(row["status"], "secondary"),
-            "total": row["total"],
+            "key": status,
+            "label": labels.get(status, status.title()),
+            "badge": STATUS_BADGE_CLASSES.get(status, "secondary"),
+            "total": status_map.get(status, 0),
         }
-        for row in status_totals
+        for status in status_order
     ]
-
-STATUS_BADGE_CLASSES = GeneratedVideo.STATUS_BADGE_CLASSES
 
 
 def _activity_user(request):
@@ -62,20 +64,6 @@ def _activity_user(request):
     if user and getattr(user, "is_authenticated", False):
         return user
     return None
-
-
-def _status_summary():
-    status_counts = GeneratedVideo.objects.values("status").annotate(total=Count("id"))
-    status_map = {item["status"]: item["total"] for item in status_counts}
-    status_order = ["ready", "processing", "pending", "failed", "draft", "archived"]
-    return [
-        {
-            "key": status,
-            "label": dict(GeneratedVideo.STATUS_CHOICES).get(status, status.title()),
-            "count": status_map.get(status, 0),
-        }
-        for status in status_order
-    ]
 
 
 class StaffRequiredMixin(UserPassesTestMixin):
