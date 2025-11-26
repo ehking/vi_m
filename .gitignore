@@ -1,0 +1,19 @@
+# Django/SQLite artifacts
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.db
+*.db-journal
+
+# Media and static artifacts generated at runtime
+media/
+static/
+
+# Environment and editor files
+.env
+*.log
+*.pot
+*.pyc
+.DS_Store
+.idea/
+.vscode/
