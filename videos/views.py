@@ -1,6 +1,6 @@
 import logging
 import os
-from pathlib import Path
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
@@ -17,12 +17,8 @@ from django.views.generic import (
 )
 from django.views.generic.edit import FormMixin
 
-from .forms import (
-    AudioTrackForm,
-    GeneratedVideoForm,
-    GeneratedVideoStatusForm,
-    VideoProjectForm,
-)
+from django.core.files.base import ContentFile
+from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
 from .services.video_generation import generate_video_for_instance
 
@@ -310,6 +306,46 @@ def generate_ai_video(request, pk):
         messages.success(request, "Video generated successfully.")
     else:
         messages.error(request, video.error_message or "Video generation failed.")
+
+    return redirect('video-detail', pk=video.pk)
+
+
+def generate_video_for_audio(audio_track: AudioTrack):
+    """Create a placeholder video file for the given audio track.
+
+    This helper is intentionally simple so it can be mocked in tests or swapped
+    for a real MoviePy-based implementation later.
+    """
+
+    # In a real system we would render visuals synchronized to the audio.
+    # For now, return deterministic bytes and a short duration.
+    return b"DEMO_MP4_DATA", 5
+
+
+@login_required
+def generate_ai_video(request, pk):
+    video = get_object_or_404(GeneratedVideo, pk=pk)
+
+    if request.method != "POST":
+        return redirect('video-detail', pk=video.pk)
+
+    video.status = "processing"
+    video.save(update_fields=["status"])
+
+    try:
+        video_bytes, duration_seconds = generate_video_for_audio(video.audio_track)
+        filename = f"generated_{video.pk}.mp4"
+        video.video_file.save(filename, ContentFile(video_bytes), save=False)
+        video.duration_seconds = duration_seconds
+        video.status = "ready"
+        video.error_message = ""
+        video.save(update_fields=["video_file", "duration_seconds", "status", "error_message"])
+        messages.success(request, "Video generated successfully.")
+    except Exception as exc:  # pragma: no cover - handled in tests via mock
+        video.status = "failed"
+        video.error_message = str(exc)
+        video.save(update_fields=["status", "error_message"])
+        messages.error(request, "Video generation failed.")
 
     return redirect('video-detail', pk=video.pk)
 

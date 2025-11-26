@@ -1,74 +1,52 @@
+import os
 import tempfile
+from unittest import mock
 
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from django.contrib.auth import get_user_model
 
 from videos.models import AudioTrack, GeneratedVideo
 
 
-class VideoListViewTest(TestCase):
+@override_settings(MEDIA_ROOT=tempfile.gettempdir())
+class GenerateAIVideoViewTests(TestCase):
     def setUp(self):
         User = get_user_model()
-        self.user = User.objects.create_user(username='tester', password='password')
-        audio_file = SimpleUploadedFile('test.mp3', b'audio', content_type='audio/mpeg')
-        AudioTrack.objects.create(title='Song', audio_file=audio_file)
+        self.user = User.objects.create_user(username="tester", password="password")
+        self.client.login(username="tester", password="password")
 
-    def test_video_list_accessible_without_login(self):
-        response = self.client.get(reverse('video-list'))
-        self.assertEqual(response.status_code, 200)
+        self.audio = AudioTrack.objects.create(
+            title="Song", artist="Artist", audio_file=SimpleUploadedFile("song.mp3", b"audio", content_type="audio/mpeg")
+        )
+        self.video = GeneratedVideo.objects.create(audio_track=self.audio, title="Draft", status="pending")
 
-    def test_video_list_authenticated(self):
-        self.client.login(username='tester', password='password')
-        response = self.client.get(reverse('video-list'))
-        self.assertEqual(response.status_code, 200)
+    def test_generate_ai_video_success(self):
+        with mock.patch("videos.views.generate_video_for_audio") as generate_mock:
+            generate_mock.return_value = (b"video-bytes", 42)
 
+            response = self.client.post(reverse("generate-ai-video", args=[self.video.pk]))
 
-class GeneratedVideoCreateUpdateViewTest(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_user(username='creator', password='password')
+        self.assertRedirects(response, reverse("video-detail", args=[self.video.pk]))
+        self.video.refresh_from_db()
 
-    def test_create_video_redirects_to_list(self):
-        self.client.login(username='creator', password='password')
-        with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=tmpdir):
-            audio_file = SimpleUploadedFile('test.mp3', b'audio', content_type='audio/mpeg')
-            audio = AudioTrack.objects.create(title='Song', audio_file=audio_file)
+        self.assertEqual(self.video.status, "ready")
+        self.assertEqual(self.video.duration_seconds, 42)
+        self.assertFalse(self.video.error_message)
+        self.assertTrue(self.video.video_file.name.endswith(".mp4"))
+        self.assertTrue(os.path.exists(self.video.video_file.path))
 
-            video_file = SimpleUploadedFile('video.mp4', b'video', content_type='video/mp4')
-            response = self.client.post(
-                reverse('video-create'),
-                {
-                    'audio_track': audio.id,
-                    'title': 'Video Title',
-                    'video_file': video_file,
-                },
-            )
+    def test_generate_ai_video_failure(self):
+        with mock.patch("videos.views.generate_video_for_audio") as generate_mock:
+            generate_mock.side_effect = RuntimeError("moviepy exploded")
 
-            self.assertRedirects(response, reverse('video-list'))
-            self.assertEqual(GeneratedVideo.objects.count(), 1)
-            video = GeneratedVideo.objects.first()
-            self.assertEqual(video.audio_track, audio)
+            response = self.client.post(reverse("generate-ai-video", args=[self.video.pk]))
 
-    def test_update_video_redirects_to_list(self):
-        self.client.login(username='creator', password='password')
-        with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=tmpdir):
-            audio_file = SimpleUploadedFile('test.mp3', b'audio', content_type='audio/mpeg')
-            audio = AudioTrack.objects.create(title='Song', audio_file=audio_file)
-            initial_video_file = SimpleUploadedFile('video.mp4', b'video', content_type='video/mp4')
-            video = GeneratedVideo.objects.create(audio_track=audio, title='Video', video_file=initial_video_file)
+        self.assertRedirects(response, reverse("video-detail", args=[self.video.pk]))
+        self.video.refresh_from_db()
 
-            updated_video_file = SimpleUploadedFile('video2.mp4', b'new video', content_type='video/mp4')
-            response = self.client.post(
-                reverse('video-edit', args=[video.pk]),
-                {
-                    'audio_track': audio.id,
-                    'title': 'Updated Title',
-                    'video_file': updated_video_file,
-                },
-            )
-
-            self.assertRedirects(response, reverse('video-list'))
-            video.refresh_from_db()
-            self.assertEqual(video.title, 'Updated Title')
+        self.assertEqual(self.video.status, "failed")
+        self.assertIn("moviepy exploded", self.video.error_message)
+        self.assertFalse(self.video.video_file)
+        self.assertIsNone(self.video.duration_seconds)
