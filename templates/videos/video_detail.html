@@ -47,12 +47,19 @@
             </div>
         </div>
     </div>
-    <div class="col-lg-5">
-        <div class="card card-shadow mb-3">
-            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
-                <span>AI Generation</span>
-                {% if video.status == 'processing' %}<span class="badge bg-warning text-dark">Processing</span>{% endif %}
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">AI Generation</div>
+            <div class="card-body">
+                <form id="generateVideoForm" method="post" action="">
+                    {% csrf_token %}
+                    <p class="text-muted small">Kick off a fresh AI render using the current track and settings.</p>
+                    <button type="button" class="btn btn-primary w-100" id="generateVideoTrigger">Generate AI Video</button>
+                </form>
             </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-header">Video File</div>
             <div class="card-body">
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-2">
@@ -102,6 +109,58 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="confirmGenerateModal" tabindex="-1" aria-labelledby="confirmGenerateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmGenerateModalLabel">Generate AI Video</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Do you want to generate a new AI video for this track?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmGenerateButton">Generate</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const generateForm = document.getElementById('generateVideoForm');
+        const triggerButton = document.getElementById('generateVideoTrigger');
+        const confirmButton = document.getElementById('confirmGenerateButton');
+        const modalElement = document.getElementById('confirmGenerateModal');
+        const modalInstance = modalElement ? new bootstrap.Modal(modalElement) : null;
+
+        function submitGenerationForm() {
+            if (!generateForm) return;
+            if (window.GenerationUI && typeof window.GenerationUI.showGenerationLoader === 'function') {
+                window.GenerationUI.showGenerationLoader();
+            }
+            generateForm.submit();
+        }
+
+        triggerButton?.addEventListener('click', function (event) {
+            event.preventDefault();
+            modalInstance?.show();
+        });
+
+        confirmButton?.addEventListener('click', function () {
+            modalInstance?.hide();
+            submitGenerationForm();
+        });
+
+        generateForm?.addEventListener('submit', function () {
+            if (window.GenerationUI && typeof window.GenerationUI.showGenerationLoader === 'function') {
+                window.GenerationUI.showGenerationLoader();
+            }
+        });
+    });
+</script>
 {% endblock %}
 {% block extra_js %}
 <script>
