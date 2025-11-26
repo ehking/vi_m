@@ -1,10 +1,13 @@
+import logging
 import os
+
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
+from django.views import View
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -16,6 +19,9 @@ from django.views.generic import (
 
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from .services.video_generation import VideoGenerationError, generate_video_for_instance
+
+logger = logging.getLogger(__name__)
 
 
 def _activity_user(request):
@@ -321,3 +327,26 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
         )
         messages.success(request, 'Project deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
+class GenerateVideoView(View):
+    def post(self, request, pk):
+        video = get_object_or_404(GeneratedVideo, pk=pk)
+        logger.info("Starting AI video generation via UI for video %s", video.pk)
+
+        try:
+            generate_video_for_instance(video)
+        except VideoGenerationError as exc:
+            logger.warning("Video generation failed for video %s: %s", video.pk, exc)
+            messages.error(request, f"Failed to generate video: {exc}")
+            return redirect('video-detail', pk=pk)
+
+        ActivityLog.objects.create(
+            user=_activity_user(request),
+            action='generate_video',
+            object_type='GeneratedVideo',
+            object_id=video.id,
+            description=f"Generated video {video.title}",
+        )
+        messages.success(request, 'AI video generated successfully.')
+        return redirect('video-detail', pk=pk)
