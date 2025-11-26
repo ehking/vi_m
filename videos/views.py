@@ -22,7 +22,10 @@ from django.views import View
 from django.core.files.base import ContentFile
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
-from .services import generate_video_for_instance
+from videos.services.video_generation import (
+    VideoGenerationError,
+    generate_video_for_instance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -618,24 +621,27 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
-class TriggerVideoGenerationView(StaffRequiredMixin, View):
+class GenerateAIVideoView(View):
     def post(self, request, pk):
         video = get_object_or_404(GeneratedVideo, pk=pk)
+        logger.info("Received AI video generation request for video %s.", video.pk)
+
         try:
             generate_video_for_instance(video)
-            messages.success(request, "Video generation completed successfully.")
+        except VideoGenerationError as exc:
+            logger.warning("AI video generation failed for video %s: %s", video.pk, exc)
+            messages.error(request, f"Failed to generate video: {exc}")
         except Exception as exc:  # noqa: BLE001
-            messages.error(request, f"Video generation failed: {exc}")
-        return redirect('video-detail', pk=pk)
+            logger.exception("Unexpected error during video generation for video %s.", video.pk)
+            messages.error(request, "An unexpected error occurred while generating the video.")
+        else:
+            ActivityLog.objects.create(
+                user=_activity_user(request),
+                action='generate_video',
+                object_type='GeneratedVideo',
+                object_id=video.id,
+                description=f"Generated AI video for {video.title}",
+            )
+            messages.success(request, 'AI video generated successfully.')
 
-
-class VideoGenerationDebugListView(StaffRequiredMixin, TemplateView):
-    template_name = 'videos/debug_list.html'
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["recent_failures"] = VideoGenerationLog.objects.select_related("video").filter(
-            status="failed"
-        )[:50]
-        context["recent_activity"] = VideoGenerationLog.objects.select_related("video").all()[:100]
-        return context
+        return redirect('video-detail', pk=video.pk)
