@@ -2,6 +2,10 @@
 {% block title %}{{ form.instance.pk|yesno:'Edit Video,Create Video' }}{% endblock %}
 {% block content %}
 <h1 class="mb-4">{{ form.instance.pk|yesno:'Edit Video,Create Video' }}</h1>
+<div class="alert alert-info" role="alert">
+    Upload an audio track and details to generate a video. Providing an existing video file is optional if you plan to
+    create the video from the audio automatically.
+</div>
 <form method="post" enctype="multipart/form-data" class="row g-3">
     {% csrf_token %}
     {{ form.non_field_errors }}
