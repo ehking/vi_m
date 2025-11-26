@@ -29,6 +29,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'videos.middleware.SchemaHealthcheckMiddleware',
 ]
 
 ROOT_URLCONF = 'music_video_panel.urls'

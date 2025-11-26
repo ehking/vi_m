@@ -1,0 +1,18 @@
+{% extends "videos/base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="alert alert-danger" role="alert">
+            <h4 class="alert-heading">Database schema is out of date</h4>
+            <p>
+                The application could not load data because your local database is missing
+                the latest migrations. Please run the following command and then reload the
+                page:
+            </p>
+            <pre class="mb-3"><code>{{ migration_command }}</code></pre>
+            <p class="mb-0 text-muted">Error details: {{ error }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
