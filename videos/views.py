@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from django.contrib import messages
@@ -5,8 +6,7 @@ from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404, redirect
-from django.urls import reverse, reverse_lazy
-from django.views import View
+from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -24,6 +24,10 @@ from .forms import (
     VideoProjectForm,
 )
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from .services.video_generation import generate_video_for_instance
+
+
+logger = logging.getLogger(__name__)
 
 
 STATUS_BADGE_CLASSES = {
@@ -292,6 +296,22 @@ def video_generate(request, pk):
         messages.error(request, f'Failed to generate video: {exc}')
 
     return redirect_url
+
+
+def generate_ai_video(request, pk):
+    video = get_object_or_404(
+        GeneratedVideo.objects.select_related('audio_track'), pk=pk
+    )
+
+    logger.info("Triggering AI video generation for video %s", video.pk)
+    video = generate_video_for_instance(video)
+
+    if video.status == "ready":
+        messages.success(request, "Video generated successfully.")
+    else:
+        messages.error(request, video.error_message or "Video generation failed.")
+
+    return redirect('video-detail', pk=video.pk)
 
 
 class GeneratedVideoCreateView(CreateView):
