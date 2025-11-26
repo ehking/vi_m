@@ -2,7 +2,29 @@ from django import forms
 from .models import AudioTrack, GeneratedVideo, VideoProject
 
 
-class AudioTrackForm(forms.ModelForm):
+class StyledModelForm(forms.ModelForm):
+    """Base form that adds Bootstrap-friendly classes to widgets."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            widget = field.widget
+            existing_classes = widget.attrs.get("class", "").split()
+
+            if isinstance(widget, forms.CheckboxInput):
+                self._ensure_class(widget, existing_classes, "form-check-input")
+            elif isinstance(widget, (forms.Select, forms.SelectMultiple)):
+                self._ensure_class(widget, existing_classes, "form-select")
+            else:
+                self._ensure_class(widget, existing_classes, "form-control")
+
+    @staticmethod
+    def _ensure_class(widget, existing_classes, class_name):
+        if class_name not in existing_classes:
+            widget.attrs["class"] = " ".join(existing_classes + [class_name]).strip()
+
+
+class AudioTrackForm(StyledModelForm):
     class Meta:
         model = AudioTrack
         fields = [
@@ -15,7 +37,7 @@ class AudioTrackForm(forms.ModelForm):
         ]
 
 
-class GeneratedVideoForm(forms.ModelForm):
+class GeneratedVideoForm(StyledModelForm):
     class Meta:
         model = GeneratedVideo
         fields = [
@@ -37,7 +59,7 @@ class GeneratedVideoForm(forms.ModelForm):
         ]
 
 
-class VideoProjectForm(forms.ModelForm):
+class VideoProjectForm(StyledModelForm):
     class Meta:
         model = VideoProject
         fields = [
