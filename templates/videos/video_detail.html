@@ -1,63 +1,187 @@
 {% extends 'videos/base.html' %}
-{% block title %}{{ video.title }}{% endblock %}
+{% block title %}Video Detail{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between mb-3 align-items-center">
+    <h1 class="mb-0">{{ video.title }}</h1>
     <div>
-        <h1 class="h4 mb-0">{{ video.title }}</h1>
-        <p class="text-muted mb-0">{{ video.audio_track }}</p>
-    </div>
-    <div class="btn-group">
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'video-edit' video.pk %}">Edit</a>
-        <a class="btn btn-outline-danger btn-sm" href="{% url 'video-delete' video.pk %}">Delete</a>
+        <a class="btn btn-secondary" href="{% url 'video-list' %}">Back to list</a>
+        {% if user.is_staff %}
+            <form method="post" action="{% url 'video-generate' video.pk %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-warning">Generate AI Video</button>
+            </form>
+        {% endif %}
+        <a class="btn btn-primary" href="{% url 'video-edit' video.pk %}">Edit</a>
+        {% if user.is_staff %}
+            <a class="btn btn-danger" href="{% url 'video-delete' video.pk %}">Delete</a>
+        {% endif %}
     </div>
 </div>
-<div class="row g-3">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">Description</div>
-            <div class="card-body">
-                <p class="mb-0">{{ video.description|default:'No description provided.' }}</p>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab">Overview</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#debug" type="button" role="tab">Debug</button>
+    </li>
+</ul>
+<div class="tab-content">
+    <div class="tab-pane fade show active" id="overview" role="tabpanel">
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="ratio ratio-16x9">
+                    <video controls src="{{ video.video_file.url }}" class="w-100 h-100"></video>
+                </div>
+            </div>
+            <div class="col-md-4">
+                {% if video.thumbnail %}
+                    <img src="{{ video.thumbnail.url }}" class="img-fluid mb-3" alt="thumbnail">
+                {% endif %}
+                <p><strong>Status:</strong> <span class="badge bg-info text-dark">{{ video.status|capfirst }}</span></p>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong>Progress</strong>
+                        <span class="text-muted small">{{ video.generation_progress }}%</span>
+                    </div>
+                    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ video.generation_progress }}">
+                        <div class="progress-bar bg-success" style="width: {{ video.generation_progress }}%"></div>
+                    </div>
+                </div>
+                <p><strong>Mood:</strong> {{ video.mood|default:'-'|capfirst }}</p>
+                <p><strong>Created:</strong> {{ video.created_at }}</p>
+                <p><strong>Updated:</strong> {{ video.updated_at }}</p>
+                <p><strong>Duration:</strong> {{ video.duration_seconds|default:'-' }} seconds</p>
+                <p><strong>File Size:</strong> {{ video.file_size_bytes|default:'-' }} bytes</p>
+                <p><strong>Resolution:</strong> {{ video.resolution|default:'-' }}</p>
+                <p><strong>Aspect Ratio:</strong> {{ video.aspect_ratio|default:'-' }}</p>
+                <p><strong>Error Code:</strong> {{ video.error_code|default:'-' }}</p>
+                {% if video.error_message %}
+                    <div class="alert alert-danger">Error: {{ video.error_message }}</div>
+                {% endif %}
             </div>
         </div>
-        <div class="card mt-3">
-            <div class="card-header">Metadata</div>
-            <table class="table mb-0">
-                <tr><th>Status</th><td>{{ video.get_status_display }}</td></tr>
-                <tr><th>Mood</th><td>{{ video.get_mood_display|default:'-' }}</td></tr>
-                <tr><th>Resolution</th><td>{{ video.resolution|default:'-' }}</td></tr>
-                <tr><th>Aspect Ratio</th><td>{{ video.aspect_ratio|default:'-' }}</td></tr>
-                <tr><th>Duration (s)</th><td>{{ video.duration_seconds|default:'-' }}</td></tr>
-                <tr><th>File Size (bytes)</th><td>{{ video.file_size_bytes|default:'-' }}</td></tr>
-                <tr><th>Tags</th><td>{{ video.tags|default:'-' }}</td></tr>
-                <tr><th>Prompt</th><td>{{ video.prompt_used|default:'-' }}</td></tr>
-                <tr><th>Model</th><td>{{ video.model_name|default:'-' }}</td></tr>
-                <tr><th>Seed</th><td>{{ video.seed|default:'-' }}</td></tr>
-                <tr><th>Generation Time (ms)</th><td>{{ video.generation_time_ms|default:'-' }}</td></tr>
-                <tr><th>Generation Progress</th><td>{{ video.generation_progress }}%</td></tr>
-                <tr><th>Error Code</th><td>{{ video.error_code|default:'-' }}</td></tr>
-                <tr><th>Error Message</th><td>{{ video.error_message|default:'-' }}</td></tr>
-            </table>
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <h4>Description</h4>
+                <p>{{ video.description|default:'No description.' }}</p>
+                <h4>Tags</h4>
+                <p>{{ video.tags|default:'-' }}</p>
+                <h4>Prompt</h4>
+                <p>{{ video.prompt_used|default:'-' }}</p>
+            </div>
+            <div class="col-md-6">
+                <h4>AI Metadata</h4>
+                <p><strong>Model:</strong> {{ video.model_name|default:'-' }}</p>
+                <p><strong>Generation Time (ms):</strong> {{ video.generation_time_ms|default:'-' }}</p>
+                <p><strong>Seed:</strong> {{ video.seed|default:'-' }}</p>
+                <h4>Audio Track</h4>
+                <p><a href="{% url 'audio-detail' video.audio_track.pk %}">{{ video.audio_track.title }}</a> by {{ video.audio_track.artist|default:'Unknown' }}</p>
+                <p><strong>Language:</strong> {{ video.audio_track.language|default:'-' }}</p>
+                <p><strong>Lyrics:</strong> {{ video.audio_track.lyrics|truncatechars:150 }}</p>
+            </div>
+        </div>
+        <div class="card mb-4">
+            <div class="card-header">Generation Log</div>
+            <div class="card-body">
+                {% if video.generation_log %}
+                    <pre class="mb-0" style="white-space: pre-wrap;">{{ video.generation_log }}</pre>
+                {% else %}
+                    <p class="text-muted mb-0">No generation log available yet.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">Projects</div>
+            <div class="card-body">
+                {% if video.projects.all %}
+                    <ul class="list-group">
+                        {% for project in video.projects.all %}
+                            <li class="list-group-item"><a href="{% url 'project-detail' project.pk %}">{{ project.name }}</a></li>
+                        {% empty %}
+                            <li class="list-group-item">No projects.</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card mb-3">
-            <div class="card-header">Video File</div>
-            <div class="card-body">
-                {% if video.video_file %}
-                    <a href="{{ video.video_file.url }}" class="btn btn-primary w-100">Download</a>
-                {% else %}
-                    <p class="mb-0 text-muted">No video file uploaded.</p>
-                {% endif %}
+    <div class="tab-pane fade" id="debug" role="tabpanel">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="card text-bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">Current Stage</h6>
+                        <p class="card-text fs-5 mb-0">{{ video.current_stage|default:'-' }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">Last Error</h6>
+                        <p class="card-text mb-1">{{ video.last_error_message|default:'None' }}</p>
+                        <small class="text-muted">{{ video.last_error_at|default:'-' }}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title">Status</h6>
+                        <span class="badge bg-secondary">{{ video.status|capfirst }}</span>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="card">
-            <div class="card-header">Thumbnail</div>
-            <div class="card-body text-center">
-                {% if video.thumbnail %}
-                    <img class="img-fluid" src="{{ video.thumbnail.url }}" alt="Thumbnail">
-                {% else %}
-                    <p class="mb-0 text-muted">No thumbnail available.</p>
-                {% endif %}
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Generation Events</span>
+                <span class="badge bg-info text-dark">{{ generation_logs|length }}</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>When</th>
+                                <th>Stage</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in generation_logs %}
+                                <tr>
+                                    <td class="text-muted">{{ log.created_at }}</td>
+                                    <td>{{ log.stage }}</td>
+                                    <td>
+                                        {% if log.status == 'failed' %}
+                                            <span class="badge bg-danger">Failed</span>
+                                        {% elif log.status == 'success' %}
+                                            <span class="badge bg-success">Success</span>
+                                        {% elif log.status == 'started' %}
+                                            <span class="badge bg-info text-dark">Started</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Info</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ log.message|default:'-' }}
+                                        {% if log.detail and has_debug_access %}
+                                            <details class="mt-1">
+                                                <summary>Details</summary>
+                                                <pre class="mb-0" style="white-space: pre-wrap;">{{ log.detail }}</pre>
+                                            </details>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="4" class="p-3">No debug logs recorded for this video yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

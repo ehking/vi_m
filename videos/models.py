@@ -53,6 +53,9 @@ class GeneratedVideo(models.Model):
     aspect_ratio = models.CharField(max_length=20, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     error_message = models.TextField(blank=True)
+    current_stage = models.CharField(max_length=100, blank=True)
+    last_error_message = models.TextField(blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     tags = models.TextField(blank=True)
     mood = models.CharField(max_length=20, blank=True, choices=MOOD_CHOICES)
@@ -71,6 +74,32 @@ class GeneratedVideo(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class VideoGenerationLog(models.Model):
+    STATUS_CHOICES = [
+        ("started", "Started"),
+        ("success", "Success"),
+        ("failed", "Failed"),
+        ("info", "Info"),
+    ]
+
+    video = models.ForeignKey(
+        GeneratedVideo,
+        related_name="generation_logs",
+        on_delete=models.CASCADE,
+    )
+    stage = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    message = models.TextField(blank=True)
+    detail = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.video_id} - {self.stage} ({self.status})"
 
 
 class VideoProject(models.Model):

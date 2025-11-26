@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -13,9 +13,11 @@ from django.views.generic import (
     TemplateView,
     UpdateView,
 )
+from django.views import View
 
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
-from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoGenerationLog, VideoProject
+from .services.video_generation import generate_video_for_instance
 
 
 def _activity_user(request):
@@ -101,6 +103,14 @@ class GeneratedVideoDetailView(DetailView):
     model = GeneratedVideo
     template_name = 'videos/video_detail.html'
     context_object_name = 'video'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["generation_logs"] = list(
+            self.object.generation_logs.all().order_by("-created_at")[:100]
+        )
+        context["has_debug_access"] = self.request.user.is_staff
+        return context
 
 
 class GeneratedVideoCreateView(CreateView):
@@ -321,3 +331,26 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
         )
         messages.success(request, 'Project deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
+class TriggerVideoGenerationView(StaffRequiredMixin, View):
+    def post(self, request, pk):
+        video = get_object_or_404(GeneratedVideo, pk=pk)
+        try:
+            generate_video_for_instance(video)
+            messages.success(request, "Video generation completed successfully.")
+        except Exception as exc:  # noqa: BLE001
+            messages.error(request, f"Video generation failed: {exc}")
+        return redirect('video-detail', pk=pk)
+
+
+class VideoGenerationDebugListView(StaffRequiredMixin, TemplateView):
+    template_name = 'videos/debug_list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["recent_failures"] = VideoGenerationLog.objects.select_related("video").filter(
+            status="failed"
+        )[:50]
+        context["recent_activity"] = VideoGenerationLog.objects.select_related("video").all()[:100]
+        return context
