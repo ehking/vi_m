@@ -1,7 +1,6 @@
 import logging
 import os
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.files.base import ContentFile
 from django.db.models import Count, Q
@@ -55,6 +54,8 @@ def _status_summary():
         for row in status_totals
     ]
 
+STATUS_BADGE_CLASSES = GeneratedVideo.STATUS_BADGE_CLASSES
+
 
 def _activity_user(request):
     user = getattr(request, "user", None)
@@ -63,21 +64,18 @@ def _activity_user(request):
     return None
 
 
-@login_required
-def generate_video(request, pk):
-    video = get_object_or_404(GeneratedVideo, pk=pk)
-
-    try:
-        generate_video_for_instance(video)
-    except VideoGenerationError as exc:
-        messages.error(request, f"Video generation failed: {exc}")
-    else:
-        if video.status == "ready":
-            messages.success(request, "Video generated successfully.")
-        else:
-            messages.error(request, "Video generation did not complete successfully.")
-
-    return redirect('video-detail', pk=video.pk)
+def _status_summary():
+    status_counts = GeneratedVideo.objects.values("status").annotate(total=Count("id"))
+    status_map = {item["status"]: item["total"] for item in status_counts}
+    status_order = ["ready", "processing", "pending", "failed", "draft", "archived"]
+    return [
+        {
+            "key": status,
+            "label": dict(GeneratedVideo.STATUS_CHOICES).get(status, status.title()),
+            "count": status_map.get(status, 0),
+        }
+        for status in status_order
+    ]
 
 
 class StaffRequiredMixin(UserPassesTestMixin):
@@ -143,8 +141,6 @@ class GeneratedVideoListView(ListView):
             queryset = queryset.filter(Q(title__icontains=search) | Q(tags__icontains=search))
         queryset = queryset.order_by('-created_at')
         try:
-            # Trigger a lightweight query so schema issues (e.g., missing columns) surface here
-            # and can be handled gracefully instead of exploding during template rendering.
             queryset.exists()
         except OperationalError as exc:
             messages.error(
@@ -159,7 +155,6 @@ class GeneratedVideoListView(ListView):
         context = super().get_context_data(**kwargs)
         context['status_counts'] = _status_summary()
         return context
-
 
 
 class GeneratedVideoDetailView(FormMixin, DetailView):
@@ -237,21 +232,39 @@ class VideoGenerationDebugListView(TemplateView):
         return context
 
 
-class GenerateAIVideoView(View):
+class GenerateVideoView(View):
     def post(self, request, pk):
         video = get_object_or_404(GeneratedVideo, pk=pk)
-        try:
-            generate_video_for_instance(video)
-        except Exception:  # noqa: BLE001
-            logger.exception("Failed to generate video %s", video.pk)
-            messages.error(request, "Failed to generate the video. Please try again.")
+        if video.status == "processing":
+            messages.info(request, "Video generation already in progress.")
             return redirect('video-detail', pk=video.pk)
 
+        try:
+            generate_video_for_instance(video)
+        except VideoGenerationError as exc:
+            logger.warning("Video generation failed for video %s: %s", video.pk, exc)
+            messages.error(request, f"Failed to generate video: {exc}")
+            return redirect('video-detail', pk=pk)
+
+        ActivityLog.objects.create(
+            user=_activity_user(request),
+            action='generate_video',
+            object_type='GeneratedVideo',
+            object_id=video.id,
+            description=f"Generated video {video.title}",
+        )
         if video.status == "ready":
-            messages.success(request, "Video generated successfully.")
+            messages.success(request, 'AI video generated successfully.')
         else:
             messages.error(request, video.error_message or "Video generation failed.")
-        return redirect('video-detail', pk=video.pk)
+        return redirect('video-detail', pk=pk)
+
+
+class VideoGenerationDebugListView(StaffRequiredMixin, ListView):
+    model = VideoGenerationLog
+    template_name = "videos/debug_list.html"
+    context_object_name = "generation_logs"
+    paginate_by = 50
 
 
 class AudioGenerateVideoView(View):
@@ -499,26 +512,3 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
         )
         messages.success(request, 'Project deleted successfully.')
         return super().delete(request, *args, **kwargs)
-
-
-class GenerateVideoView(View):
-    def post(self, request, pk):
-        video = get_object_or_404(GeneratedVideo, pk=pk)
-        logger.info("Starting AI video generation via UI for video %s", video.pk)
-
-        try:
-            generate_video_for_instance(video)
-        except VideoGenerationError as exc:
-            logger.warning("Video generation failed for video %s: %s", video.pk, exc)
-            messages.error(request, f"Failed to generate video: {exc}")
-            return redirect('video-detail', pk=pk)
-
-        ActivityLog.objects.create(
-            user=_activity_user(request),
-            action='generate_video',
-            object_type='GeneratedVideo',
-            object_id=video.id,
-            description=f"Generated video {video.title}",
-        )
-        messages.success(request, 'AI video generated successfully.')
-        return redirect('video-detail', pk=pk)
