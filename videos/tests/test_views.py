@@ -15,9 +15,9 @@ class VideoListViewTest(TestCase):
         audio_file = SimpleUploadedFile('test.mp3', b'audio', content_type='audio/mpeg')
         AudioTrack.objects.create(title='Song', audio_file=audio_file)
 
-    def test_video_list_requires_login(self):
+    def test_video_list_accessible_without_login(self):
         response = self.client.get(reverse('video-list'))
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
 
     def test_video_list_authenticated(self):
         self.client.login(username='tester', password='password')

@@ -1,6 +1,6 @@
 import os
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
 from django.shortcuts import redirect
@@ -18,6 +18,13 @@ from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
 
 
+def _activity_user(request):
+    user = getattr(request, "user", None)
+    if user and getattr(user, "is_authenticated", False):
+        return user
+    return None
+
+
 class StaffRequiredMixin(UserPassesTestMixin):
     def test_func(self):
         return self.request.user.is_staff
@@ -27,7 +34,7 @@ class StaffRequiredMixin(UserPassesTestMixin):
         return redirect('dashboard')
 
 
-class DashboardView(LoginRequiredMixin, TemplateView):
+class DashboardView(TemplateView):
     template_name = 'videos/dashboard.html'
 
     def get_context_data(self, **kwargs):
@@ -57,7 +64,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class GeneratedVideoListView(LoginRequiredMixin, ListView):
+class GeneratedVideoListView(ListView):
     model = GeneratedVideo
     template_name = 'videos/video_list.html'
     context_object_name = 'videos'
@@ -74,16 +81,24 @@ class GeneratedVideoListView(LoginRequiredMixin, ListView):
             queryset = queryset.filter(mood=mood)
         if search:
             queryset = queryset.filter(Q(title__icontains=search) | Q(tags__icontains=search))
-        return queryset.order_by('-created_at')
+        try:
+            return queryset.order_by('-created_at')
+        except OperationalError as exc:
+            messages.error(
+                self.request,
+                "Database schema is out of date. Please run 'python manage.py migrate' to create new"
+                f" columns (error: {exc}).",
+            )
+            return GeneratedVideo.objects.none()
 
 
-class GeneratedVideoDetailView(LoginRequiredMixin, DetailView):
+class GeneratedVideoDetailView(DetailView):
     model = GeneratedVideo
     template_name = 'videos/video_detail.html'
     context_object_name = 'video'
 
 
-class GeneratedVideoCreateView(LoginRequiredMixin, CreateView):
+class GeneratedVideoCreateView(CreateView):
     model = GeneratedVideo
     form_class = GeneratedVideoForm
     template_name = 'videos/video_form.html'
@@ -93,7 +108,7 @@ class GeneratedVideoCreateView(LoginRequiredMixin, CreateView):
         response = super().form_valid(form)
         self._update_file_metadata()
         ActivityLog.objects.create(
-            user=self.request.user,
+            user=_activity_user(self.request),
             action='create_video',
             object_type='GeneratedVideo',
             object_id=self.object.id,
@@ -115,7 +130,7 @@ class GeneratedVideoCreateView(LoginRequiredMixin, CreateView):
             self.object.save()
 
 
-class GeneratedVideoUpdateView(LoginRequiredMixin, UpdateView):
+class GeneratedVideoUpdateView(UpdateView):
     model = GeneratedVideo
     form_class = GeneratedVideoForm
     template_name = 'videos/video_form.html'
@@ -125,7 +140,7 @@ class GeneratedVideoUpdateView(LoginRequiredMixin, UpdateView):
         response = super().form_valid(form)
         self._update_file_metadata()
         ActivityLog.objects.create(
-            user=self.request.user,
+            user=_activity_user(self.request),
             action='update_video',
             object_type='GeneratedVideo',
             object_id=self.object.id,
@@ -155,7 +170,7 @@ class GeneratedVideoDeleteView(StaffRequiredMixin, DeleteView):
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()
         ActivityLog.objects.create(
-            user=request.user,
+            user=_activity_user(request),
             action='delete_video',
             object_type='GeneratedVideo',
             object_id=self.object.id,
@@ -165,20 +180,20 @@ class GeneratedVideoDeleteView(StaffRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
-class AudioTrackListView(LoginRequiredMixin, ListView):
+class AudioTrackListView(ListView):
     model = AudioTrack
     template_name = 'videos/audio_list.html'
     context_object_name = 'audio_tracks'
     paginate_by = 10
 
 
-class AudioTrackDetailView(LoginRequiredMixin, DetailView):
+class AudioTrackDetailView(DetailView):
     model = AudioTrack
     template_name = 'videos/audio_detail.html'
     context_object_name = 'audio'
 
 
-class AudioTrackCreateView(LoginRequiredMixin, CreateView):
+class AudioTrackCreateView(CreateView):
     model = AudioTrack
     form_class = AudioTrackForm
     template_name = 'videos/audio_form.html'
@@ -187,7 +202,7 @@ class AudioTrackCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         response = super().form_valid(form)
         ActivityLog.objects.create(
-            user=self.request.user,
+            user=_activity_user(self.request),
             action='create_audio',
             object_type='AudioTrack',
             object_id=self.object.id,
@@ -197,7 +212,7 @@ class AudioTrackCreateView(LoginRequiredMixin, CreateView):
         return response
 
 
-class AudioTrackUpdateView(LoginRequiredMixin, UpdateView):
+class AudioTrackUpdateView(UpdateView):
     model = AudioTrack
     form_class = AudioTrackForm
     template_name = 'videos/audio_form.html'
@@ -206,7 +221,7 @@ class AudioTrackUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         response = super().form_valid(form)
         ActivityLog.objects.create(
-            user=self.request.user,
+            user=_activity_user(self.request),
             action='update_audio',
             object_type='AudioTrack',
             object_id=self.object.id,
@@ -224,7 +239,7 @@ class AudioTrackDeleteView(StaffRequiredMixin, DeleteView):
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()
         ActivityLog.objects.create(
-            user=request.user,
+            user=_activity_user(request),
             action='delete_audio',
             object_type='AudioTrack',
             object_id=self.object.id,
@@ -234,20 +249,20 @@ class AudioTrackDeleteView(StaffRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
-class VideoProjectListView(LoginRequiredMixin, ListView):
+class VideoProjectListView(ListView):
     model = VideoProject
     template_name = 'videos/project_list.html'
     context_object_name = 'projects'
     paginate_by = 10
 
 
-class VideoProjectDetailView(LoginRequiredMixin, DetailView):
+class VideoProjectDetailView(DetailView):
     model = VideoProject
     template_name = 'videos/project_detail.html'
     context_object_name = 'project'
 
 
-class VideoProjectCreateView(LoginRequiredMixin, CreateView):
+class VideoProjectCreateView(CreateView):
     model = VideoProject
     form_class = VideoProjectForm
     template_name = 'videos/project_form.html'
@@ -256,7 +271,7 @@ class VideoProjectCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         response = super().form_valid(form)
         ActivityLog.objects.create(
-            user=self.request.user,
+            user=_activity_user(self.request),
             action='create_project',
             object_type='VideoProject',
             object_id=self.object.id,
@@ -266,7 +281,7 @@ class VideoProjectCreateView(LoginRequiredMixin, CreateView):
         return response
 
 
-class VideoProjectUpdateView(LoginRequiredMixin, UpdateView):
+class VideoProjectUpdateView(UpdateView):
     model = VideoProject
     form_class = VideoProjectForm
     template_name = 'videos/project_form.html'
@@ -275,7 +290,7 @@ class VideoProjectUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         response = super().form_valid(form)
         ActivityLog.objects.create(
-            user=self.request.user,
+            user=_activity_user(self.request),
             action='update_project',
             object_type='VideoProject',
             object_id=self.object.id,
@@ -293,7 +308,7 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
     def delete(self, request, *args, **kwargs):
         self.object = self.get_object()
         ActivityLog.objects.create(
-            user=request.user,
+            user=_activity_user(request),
             action='delete_project',
             object_type='VideoProject',
             object_id=self.object.id,
