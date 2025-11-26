@@ -53,10 +53,17 @@ class GeneratedVideoForm(StyledModelForm):
             'model_name',
             'seed',
             'generation_time_ms',
+            'generation_progress',
+            'generation_log',
+            'error_code',
             'resolution',
             'aspect_ratio',
             'is_active',
         ]
+        widgets = {
+            'generation_progress': forms.NumberInput(attrs={'min': 0, 'max': 100}),
+            'generation_log': forms.Textarea(attrs={'rows': 4}),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
