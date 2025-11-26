@@ -52,14 +52,25 @@ class GeneratedVideo(models.Model):
     resolution = models.CharField(max_length=50, blank=True)
     aspect_ratio = models.CharField(max_length=20, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    STATUS_BADGE_CLASSES = {
+        "draft": "secondary",
+        "pending": "info",
+        "processing": "warning",
+        "ready": "success",
+        "failed": "danger",
+        "archived": "secondary",
+    }
     error_message = models.TextField(blank=True)
+    current_stage = models.CharField(max_length=100, blank=True)
+    last_error_message = models.TextField(blank=True)
+    last_error_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     tags = models.TextField(blank=True)
     mood = models.CharField(max_length=20, blank=True, choices=MOOD_CHOICES)
     prompt_used = models.TextField(blank=True)
     model_name = models.CharField(max_length=100, blank=True)
     generation_time_ms = models.IntegerField(null=True, blank=True)
-    generation_progress = models.PositiveIntegerField(default=0, blank=True)
+    generation_progress = models.IntegerField(null=True, blank=True)
     generation_log = models.TextField(blank=True)
     error_code = models.CharField(max_length=100, blank=True)
     seed = models.IntegerField(null=True, blank=True)
@@ -71,6 +82,36 @@ class GeneratedVideo(models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def status_badge_class(self):
+        return self.STATUS_BADGE_CLASSES.get(self.status, "secondary")
+
+
+class VideoGenerationLog(models.Model):
+    STATUS_CHOICES = [
+        ("started", "Started"),
+        ("success", "Success"),
+        ("failed", "Failed"),
+        ("info", "Info"),
+    ]
+
+    video = models.ForeignKey(
+        GeneratedVideo,
+        related_name="generation_logs",
+        on_delete=models.CASCADE,
+    )
+    stage = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    message = models.TextField(blank=True)
+    detail = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.video_id} - {self.stage} ({self.status})"
 
 
 class VideoProject(models.Model):

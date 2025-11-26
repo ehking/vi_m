@@ -1,0 +1,18 @@
+{% comment %}Reusable status badge{% endcomment %}
+{% with status_lower=status|lower %}
+    {% if status_lower == 'ready' %}
+        <span class="badge bg-success">Ready</span>
+    {% elif status_lower == 'processing' %}
+        <span class="badge bg-warning text-dark">Processing</span>
+    {% elif status_lower == 'pending' %}
+        <span class="badge bg-secondary">Pending</span>
+    {% elif status_lower == 'failed' %}
+        <span class="badge bg-danger">Failed</span>
+    {% elif status_lower == 'draft' %}
+        <span class="badge bg-light text-dark">Draft</span>
+    {% elif status_lower == 'archived' %}
+        <span class="badge bg-dark">Archived</span>
+    {% else %}
+        <span class="badge bg-secondary">{{ status|default:'Unknown' }}</span>
+    {% endif %}
+{% endwith %}
