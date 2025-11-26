@@ -1,0 +1,20 @@
+{% extends 'videos/base.html' %}
+{% block title %}{{ form.instance.pk|yesno:'Edit Audio,Add Audio' }}{% endblock %}
+{% block content %}
+<h1 class="mb-4">{{ form.instance.pk|yesno:'Edit Audio,Add Audio' }}</h1>
+<form method="post" enctype="multipart/form-data" class="row g-3">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+        <div class="col-md-6">
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field.as_widget(attrs={'class': 'form-control'}) }}
+            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+        </div>
+    {% endfor %}
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <a href="{% url 'audio-list' %}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}
