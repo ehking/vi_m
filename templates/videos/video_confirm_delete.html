@@ -1,0 +1,15 @@
+{% extends 'videos/base.html' %}
+{% block title %}Delete Video{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">Delete Video</div>
+    <div class="card-body">
+        <p>Are you sure you want to delete <strong>{{ object.title }}</strong>?</p>
+        <form method="post">
+            {% csrf_token %}
+            <a class="btn btn-secondary" href="{% url 'video-detail' object.pk %}">Cancel</a>
+            <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

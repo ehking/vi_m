@@ -1,0 +1,75 @@
+{% extends 'videos/base.html' %}
+{% block title %}Videos{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Generated Videos</h1>
+    <a class="btn btn-primary" href="{% url 'video-create' %}">Create Video</a>
+</div>
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-3">
+        <input type="text" name="search" value="{{ request.GET.search }}" placeholder="Search" class="form-control">
+    </div>
+    <div class="col-md-3">
+        <select name="status" class="form-select">
+            <option value="">Status</option>
+            {% for key, label in videos.model.STATUS_CHOICES %}
+                <option value="{{ key }}" {% if request.GET.status == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select name="mood" class="form-select">
+            <option value="">Mood</option>
+            {% for key, label in videos.model.MOOD_CHOICES %}
+                <option value="{{ key }}" {% if request.GET.mood == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <button class="btn btn-outline-secondary w-100" type="submit">Filter</button>
+    </div>
+</form>
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Audio</th>
+                <th>Status</th>
+                <th>Mood</th>
+                <th>Updated</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for video in videos %}
+                <tr>
+                    <td><a href="{% url 'video-detail' video.pk %}">{{ video.title }}</a></td>
+                    <td>{{ video.audio_track }}</td>
+                    <td>{{ video.get_status_display }}</td>
+                    <td>{{ video.get_mood_display|default:'-' }}</td>
+                    <td>{{ video.updated_at|date:'Y-m-d H:i' }}</td>
+                    <td class="text-end">
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'video-edit' video.pk %}">Edit</a>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6" class="text-center">No videos found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if is_paginated %}
+<nav>
+    <ul class="pagination">
+        {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>
+        {% endif %}
+        <li class="page-item active"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+        {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends 'videos/base.html' %}
+{% block title %}Audio Tracks{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">Audio Tracks</h1>
+    <a class="btn btn-primary" href="{% url 'audio-create' %}">Add Audio</a>
+</div>
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Artist</th>
+                <th>Language</th>
+                <th>BPM</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for audio in audio_tracks %}
+                <tr>
+                    <td><a href="{% url 'audio-detail' audio.pk %}">{{ audio.title }}</a></td>
+                    <td>{{ audio.artist|default:'-' }}</td>
+                    <td>{{ audio.language|default:'-' }}</td>
+                    <td>{{ audio.bpm|default:'-' }}</td>
+                    <td>{{ audio.created_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5" class="text-center">No audio tracks found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
