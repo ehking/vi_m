@@ -233,6 +233,10 @@ class GenerateVideoView(View):
             logger.warning("Video generation failed for video %s: %s", video.pk, exc)
             messages.error(request, f"Failed to generate video: {exc}")
             return redirect('video-detail', pk=pk)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception("Unexpected error during video generation for video %s", video.pk)
+            messages.error(request, f"Failed to generate video: {exc}")
+            return redirect('video-detail', pk=pk)
 
         ActivityLog.objects.create(
             user=_activity_user(request),

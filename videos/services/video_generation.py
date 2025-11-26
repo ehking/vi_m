@@ -30,6 +30,14 @@ def _append_log(video, entries: List[str]) -> None:
         video.generation_log = combined_log
 
 
+def _load_moviepy():
+    """Lazy import MoviePy so tests can mock the module easily."""
+
+    from moviepy import editor
+
+    return editor
+
+
 def generate_video_for_instance(video):
     """
     Receives a GeneratedVideo instance (or equivalent model).
@@ -45,7 +53,7 @@ def generate_video_for_instance(video):
         log_entries.append(message)
 
     start_time = time.monotonic()
-    log_step(f"Starting generation for video #{video.pk}: {video.title}")
+    log_step(f"Starting video generation for video #{video.pk}: {video.title}")
 
     try:
         video.status = "processing"
@@ -61,8 +69,9 @@ def generate_video_for_instance(video):
 
         log_step(f"Loaded audio file from {audio_file.path}")
 
-        # Import MoviePy lazily so environments without the dependency can still load this module.
-        from moviepy.editor import AudioFileClip, ColorClip
+        editor = _load_moviepy()
+        AudioFileClip = getattr(editor, "AudioFileClip")
+        ColorClip = getattr(editor, "ColorClip")
 
         audio_clip = AudioFileClip(audio_file.path)
         duration_seconds = int(audio_clip.duration or 0)
@@ -120,7 +129,7 @@ def generate_video_for_instance(video):
         return video
 
     except VideoGenerationError as exc:
-        log_step("Video generation failed due to a known error.")
+        log_step("Generation failed: Known error encountered.")
         _append_log(video, log_entries)
         video.status = "failed"
         video.error_message = str(exc)
@@ -129,14 +138,13 @@ def generate_video_for_instance(video):
         video.save(
             update_fields=["status", "error_message", "error_code", "generation_progress", "generation_log"]
         )
-        raise
+        return video
     except Exception as exc:  # pragma: no cover - defensive catch
         logger.exception("Unexpected error during video generation")
-        log_step(f"Unexpected error: {exc}")
+        log_step(f"Generation failed: {exc}")
         _append_log(video, log_entries)
         video.status = "failed"
         video.error_message = str(exc)
         video.generation_progress = 0
         video.save(update_fields=["status", "error_message", "generation_progress", "generation_log"])
-        error_code = "import_error" if isinstance(exc, ImportError) else "unexpected"
-        raise VideoGenerationError("Unexpected error while generating the video.", code=error_code) from exc
+        return video
