@@ -6,12 +6,13 @@
         <h1 class="h4 mb-1">{{ audio.title }}</h1>
         <p class="text-muted mb-0">{{ audio.artist|default:'Unknown artist' }}</p>
     </div>
-    <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="{% url 'audio-list' %}"><i class="bi bi-arrow-left"></i> Back to list</a>
-        <a class="btn btn-outline-secondary" href="{% url 'audio-edit' audio.pk %}"><i class="bi bi-pencil"></i> Edit</a>
-        {% if user.is_staff %}
-            <a class="btn btn-outline-danger" href="{% url 'audio-delete' audio.pk %}"><i class="bi bi-trash"></i> Delete</a>
-        {% endif %}
+    <div class="btn-group">
+        <form method="post" action="{% url 'audio-generate-video' audio.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success btn-sm">Generate AI Video</button>
+        </form>
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'audio-edit' audio.pk %}">Edit</a>
+        <a class="btn btn-outline-danger btn-sm" href="{% url 'audio-delete' audio.pk %}">Delete</a>
     </div>
 </div>
 

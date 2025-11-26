@@ -3,19 +3,9 @@
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap gap-2 align-items-start mb-4">
     <div>
-        <div class="d-flex align-items-center gap-2 mb-2">
-            <h1 class="h4 mb-0">{{ video.title }}</h1>
-            {% include 'videos/partials/status_badge.html' with status=video.status %}
-            {% if video.mood %}<span class="badge bg-info text-dark text-capitalize">{{ video.mood }}</span>{% endif %}
-        </div>
-        <p class="text-muted mb-1">Audio track: {{ video.audio_track }}</p>
-        {% if tags %}
-            <div class="d-flex flex-wrap gap-1">
-                {% for tag in tags %}
-                    <span class="badge bg-light text-dark border">{{ tag }}</span>
-                {% endfor %}
-            </div>
-        {% endif %}
+        <h1 class="h4 mb-0">{{ video.title }}</h1>
+        <p class="text-muted mb-0">{{ video.audio_track }}</p>
+        <span class="badge bg-{{ video.status_badge_class }}">{{ video.get_status_display }}</span>
     </div>
     <div class="d-flex gap-2">
         <a class="btn btn-outline-secondary" href="{% url 'video-list' %}"><i class="bi bi-arrow-left"></i> Back to list</a>
@@ -40,11 +30,37 @@
                 {% endif %}
             </div>
         </div>
-        <div class="card card-shadow mb-3">
-            <div class="card-header bg-white fw-semibold">Description</div>
-            <div class="card-body">
-                <p class="mb-0">{{ video.description|default:'No description provided.' }}</p>
-            </div>
+        <div class="card mt-3">
+            <div class="card-header">Metadata</div>
+            <table class="table mb-0">
+                <tr><th>Status</th><td>{{ video.get_status_display }}</td></tr>
+                <tr><th>Mood</th><td>{{ video.get_mood_display|default:'-' }}</td></tr>
+                <tr><th>Resolution</th><td>{{ video.resolution|default:'-' }}</td></tr>
+                <tr><th>Aspect Ratio</th><td>{{ video.aspect_ratio|default:'-' }}</td></tr>
+                <tr><th>Duration (s)</th><td>{{ video.duration_seconds|default:'-' }}</td></tr>
+                <tr><th>File Size (bytes)</th><td>{{ video.file_size_bytes|default:'-' }}</td></tr>
+                <tr><th>Tags</th><td>{{ video.tags|default:'-' }}</td></tr>
+                <tr><th>Prompt</th><td>{{ video.prompt_used|default:'-' }}</td></tr>
+                <tr><th>Model</th><td>{{ video.model_name|default:'-' }}</td></tr>
+                <tr><th>Seed</th><td>{{ video.seed|default:'-' }}</td></tr>
+                <tr><th>Generation Time (ms)</th><td>{{ video.generation_time_ms|default:'-' }}</td></tr>
+                <tr>
+                    <th>Generation Progress</th>
+                    <td>
+                        {% if video.generation_progress is not None %}
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-{{ video.status_badge_class }}" role="progressbar" style="width: {{ video.generation_progress }}%;" aria-valuenow="{{ video.generation_progress }}" aria-valuemin="0" aria-valuemax="100">
+                                    {{ video.generation_progress }}%
+                                </div>
+                            </div>
+                        {% else %}
+                            <span class="text-muted">Not started</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr><th>Error Code</th><td>{{ video.error_code|default:'-' }}</td></tr>
+                <tr><th>Error Message</th><td>{{ video.error_message|default:'-' }}</td></tr>
+            </table>
         </div>
     </div>
     <div class="col-md-4">
@@ -105,6 +121,23 @@
                 <p class="mb-1 fw-semibold">{{ video.audio_track.title }}</p>
                 <p class="mb-1 text-muted small">{{ video.audio_track.artist|default:'Unknown artist' }}</p>
                 <p class="mb-0 small">Language: {{ video.audio_track.language|default:'-' }}</p>
+            </div>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">Update Status</div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {% for field in form %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                            {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+                    {% endfor %}
+                    <button type="submit" class="btn btn-primary w-100">Save Changes</button>
+                </form>
             </div>
         </div>
     </div>

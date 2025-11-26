@@ -46,55 +46,42 @@
         </div>
     </div>
 </form>
-
-<div class="card card-shadow">
-    <div class="table-responsive">
-        <table class="table table-hover table-striped align-middle mb-0">
-            <thead class="table-light">
+<div class="mb-3">
+    {% for status in status_counts %}
+        <span class="badge bg-{{ status.badge }} me-1">{{ status.label }}: {{ status.total }}</span>
+    {% endfor %}
+</div>
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Audio</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Mood</th>
+                <th>Updated</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for video in videos %}
                 <tr>
-                    <th style="width: 90px;">Thumbnail</th>
-                    <th>Title</th>
-                    <th>Audio</th>
-                    <th>Mood</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th class="text-end">Actions</th>
+                    <td><a href="{% url 'video-detail' video.pk %}">{{ video.title }}</a></td>
+                    <td>{{ video.audio_track }}</td>
+                    <td><span class="badge bg-{{ video.status_badge_class }}">{{ video.get_status_display }}</span></td>
+                    <td>{% if video.generation_progress is not None %}{{ video.generation_progress }}%{% else %}-{% endif %}</td>
+                    <td>{{ video.get_mood_display|default:'-' }}</td>
+                    <td>{{ video.updated_at|date:'Y-m-d H:i' }}</td>
+                    <td class="text-end">
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'video-edit' video.pk %}">Edit</a>
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
-                {% for video in videos %}
-                    <tr>
-                        <td>
-                            {% if video.thumbnail %}
-                                <img src="{{ video.thumbnail.url }}" alt="Thumbnail" class="img-thumbnail" style="max-width: 80px;">
-                            {% else %}
-                                <div class="bg-light border rounded text-center p-3 text-muted" style="width:80px; height:60px;">
-                                    <i class="bi bi-camera-video fs-4"></i>
-                                </div>
-                            {% endif %}
-                        </td>
-                        <td class="fw-semibold">
-                            <a class="text-decoration-none" href="{% url 'video-detail' video.pk %}">{{ video.title }}</a>
-                        </td>
-                        <td>{{ video.audio_track.title }}</td>
-                        <td class="text-capitalize">{{ video.get_mood_display|default:'-' }}</td>
-                        <td>{% include 'videos/partials/status_badge.html' with status=video.status %}</td>
-                        <td>{{ video.created_at|date:'Y-m-d H:i' }}</td>
-                        <td class="text-end">
-                            <div class="btn-group btn-group-sm" role="group">
-                                <a class="btn btn-outline-secondary" href="{% url 'video-detail' video.pk %}">View</a>
-                                <a class="btn btn-outline-secondary" href="{% url 'video-edit' video.pk %}">Edit</a>
-                                <a class="btn btn-outline-secondary" href="{% url 'video-delete' video.pk %}">Delete</a>
-                                <a class="btn btn-primary" href="{% url 'video-detail' video.pk %}#generate">Generate</a>
-                            </div>
-                        </td>
-                    </tr>
-                {% empty %}
-                    <tr><td colspan="7" class="text-center text-muted py-4">No videos found.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+            {% empty %}
+                <tr><td colspan="7" class="text-center">No videos found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 {% if is_paginated %}
