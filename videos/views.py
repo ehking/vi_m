@@ -1,9 +1,10 @@
 import os
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -16,6 +17,7 @@ from django.views.generic import (
 
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from .services.video_generation import generate_video_for_instance, VideoGenerationError
 
 
 def _activity_user(request):
@@ -23,6 +25,23 @@ def _activity_user(request):
     if user and getattr(user, "is_authenticated", False):
         return user
     return None
+
+
+@login_required
+def generate_video(request, pk):
+    video = get_object_or_404(GeneratedVideo, pk=pk)
+
+    try:
+        generate_video_for_instance(video)
+    except VideoGenerationError as exc:
+        messages.error(request, f"Video generation failed: {exc}")
+    else:
+        if video.status == "ready":
+            messages.success(request, "Video generated successfully.")
+        else:
+            messages.error(request, "Video generation did not complete successfully.")
+
+    return redirect('video-detail', pk=video.pk)
 
 
 class StaffRequiredMixin(UserPassesTestMixin):

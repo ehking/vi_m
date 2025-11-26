@@ -1,74 +1,63 @@
 import tempfile
+from unittest import mock
 
+from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from django.contrib.auth import get_user_model
 
 from videos.models import AudioTrack, GeneratedVideo
+from videos.services.video_generation import VideoGenerationError
 
 
-class VideoListViewTest(TestCase):
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class GenerateVideoViewTests(TestCase):
     def setUp(self):
         User = get_user_model()
-        self.user = User.objects.create_user(username='tester', password='password')
-        audio_file = SimpleUploadedFile('test.mp3', b'audio', content_type='audio/mpeg')
-        AudioTrack.objects.create(title='Song', audio_file=audio_file)
+        self.user = User.objects.create_user(username="creator", password="password")
+        audio_file = SimpleUploadedFile("test.mp3", b"audio", content_type="audio/mpeg")
+        self.audio = AudioTrack.objects.create(title="Song", audio_file=audio_file)
+        self.video = GeneratedVideo.objects.create(audio_track=self.audio, title="Video")
 
-    def test_video_list_accessible_without_login(self):
-        response = self.client.get(reverse('video-list'))
-        self.assertEqual(response.status_code, 200)
+    def test_generate_view_success(self):
+        self.client.login(username="creator", password="password")
+        generate_mock = mock.Mock()
 
-    def test_video_list_authenticated(self):
-        self.client.login(username='tester', password='password')
-        response = self.client.get(reverse('video-list'))
-        self.assertEqual(response.status_code, 200)
+        def _generate(video):
+            video.status = "ready"
+            video.video_file.name = "videos/generated.mp4"
+            video.save(update_fields=["status", "video_file"])
+            return video
 
+        generate_mock.side_effect = _generate
 
-class GeneratedVideoCreateUpdateViewTest(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_user(username='creator', password='password')
+        with mock.patch("videos.views.generate_video_for_instance", generate_mock):
+            response = self.client.post(reverse("video-generate", args=[self.video.pk]))
 
-    def test_create_video_redirects_to_list(self):
-        self.client.login(username='creator', password='password')
-        with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=tmpdir):
-            audio_file = SimpleUploadedFile('test.mp3', b'audio', content_type='audio/mpeg')
-            audio = AudioTrack.objects.create(title='Song', audio_file=audio_file)
+        self.assertRedirects(response, reverse("video-detail", args=[self.video.pk]))
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("Video generated successfully" in str(m) for m in messages))
 
-            video_file = SimpleUploadedFile('video.mp4', b'video', content_type='video/mp4')
-            response = self.client.post(
-                reverse('video-create'),
-                {
-                    'audio_track': audio.id,
-                    'title': 'Video Title',
-                    'video_file': video_file,
-                },
-            )
+        self.video.refresh_from_db()
+        self.assertEqual(self.video.status, "ready")
+        self.assertTrue(self.video.video_file.name)
 
-            self.assertRedirects(response, reverse('video-list'))
-            self.assertEqual(GeneratedVideo.objects.count(), 1)
-            video = GeneratedVideo.objects.first()
-            self.assertEqual(video.audio_track, audio)
+    def test_generate_view_failure(self):
+        self.client.login(username="creator", password="password")
 
-    def test_update_video_redirects_to_list(self):
-        self.client.login(username='creator', password='password')
-        with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=tmpdir):
-            audio_file = SimpleUploadedFile('test.mp3', b'audio', content_type='audio/mpeg')
-            audio = AudioTrack.objects.create(title='Song', audio_file=audio_file)
-            initial_video_file = SimpleUploadedFile('video.mp4', b'video', content_type='video/mp4')
-            video = GeneratedVideo.objects.create(audio_track=audio, title='Video', video_file=initial_video_file)
+        def _fail(video):
+            video.status = "failed"
+            video.error_message = "Generation error"
+            video.save(update_fields=["status", "error_message"])
+            raise VideoGenerationError("Generation error")
 
-            updated_video_file = SimpleUploadedFile('video2.mp4', b'new video', content_type='video/mp4')
-            response = self.client.post(
-                reverse('video-edit', args=[video.pk]),
-                {
-                    'audio_track': audio.id,
-                    'title': 'Updated Title',
-                    'video_file': updated_video_file,
-                },
-            )
+        with mock.patch("videos.views.generate_video_for_instance", side_effect=_fail):
+            response = self.client.post(reverse("video-generate", args=[self.video.pk]))
 
-            self.assertRedirects(response, reverse('video-list'))
-            video.refresh_from_db()
-            self.assertEqual(video.title, 'Updated Title')
+        self.assertRedirects(response, reverse("video-detail", args=[self.video.pk]))
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("Video generation failed" in str(m) for m in messages))
+
+        self.video.refresh_from_db()
+        self.assertEqual(self.video.status, "failed")
