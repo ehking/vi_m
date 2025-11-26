@@ -35,11 +35,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         try:
             videos = GeneratedVideo.objects.all()
             context['total_videos'] = videos.count()
-            context['status_counts'] = videos.values('status').annotate(total=Count('id'))
-            context['mood_counts'] = videos.values('mood').annotate(total=Count('id'))
+            context['status_counts'] = list(videos.values('status').annotate(total=Count('id')))
+            context['mood_counts'] = list(videos.values('mood').annotate(total=Count('id')))
             context['total_audio'] = AudioTrack.objects.count()
             context['total_projects'] = VideoProject.objects.count()
-            context['recent_videos'] = videos.order_by('-created_at')[:5]
+            context['recent_videos'] = list(videos.order_by('-created_at')[:5])
         except OperationalError as exc:
             messages.error(
                 self.request,
