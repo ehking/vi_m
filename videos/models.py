@@ -40,7 +40,12 @@ class GeneratedVideo(models.Model):
     audio_track = models.ForeignKey(AudioTrack, related_name="videos", on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    video_file = models.FileField(upload_to="videos/")
+    video_file = models.FileField(
+        upload_to="videos/",
+        blank=True,
+        null=True,
+        help_text="Optional. Leave blank to generate the video from the audio track.",
+    )
     thumbnail = models.ImageField(upload_to="thumbnails/", blank=True, null=True)
     file_size_bytes = models.BigIntegerField(null=True, blank=True)
     duration_seconds = models.IntegerField(null=True, blank=True)
