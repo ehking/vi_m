@@ -7,7 +7,7 @@
         <a class="btn btn-secondary" href="{% url 'video-list' %}">Back to list</a>
         <form class="d-inline" method="post" action="{% url 'video-generate' video.pk %}">
             {% csrf_token %}
-            <button type="submit" class="btn btn-success">Generate AI Video</button>
+            <button class="btn btn-success" type="submit">Generate AI Video</button>
         </form>
         <a class="btn btn-primary" href="{% url 'video-edit' video.pk %}">Edit</a>
         {% if user.is_staff %}

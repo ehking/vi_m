@@ -1,92 +1,36 @@
 import logging
 import os
-import tempfile
 import time
 from dataclasses import dataclass
-from typing import Iterable, List
+from pathlib import Path
+from typing import List
 
-from django.core.files import File
-from django.utils import timezone
-
-from videos.models import GeneratedVideo
+from django.conf import settings
+from django.utils.text import slugify
 
 logger = logging.getLogger(__name__)
 
 
-class VideoGenerationError(Exception):
-    """Raised when AI video generation fails."""
-
-
 @dataclass
-class _GenerationContext:
-    video: GeneratedVideo
-    log_entries: List[str]
+class VideoGenerationError(Exception):
+    message: str
+    code: str = ""
 
-    def append_log(self, message: str) -> None:
-        timestamp = timezone.now().isoformat()
-        entry = f"[{timestamp}] {message}"
-        self.log_entries.append(entry)
-
-    def flush_logs(self) -> None:
-        if not self.log_entries:
-            return
-        combined_log = "\n".join(self.log_entries)
-        if self.video.generation_log:
-            self.video.generation_log = f"{self.video.generation_log}\n{combined_log}"
-        else:
-            self.video.generation_log = combined_log
-        self.log_entries.clear()
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.message
 
 
-def _validate_audio_path(video: GeneratedVideo) -> str:
-    audio_file = getattr(video.audio_track, "audio_file", None)
-    if not audio_file or not getattr(audio_file, "path", None):
-        raise VideoGenerationError("Audio file is required to generate the video.")
-
-    audio_path = audio_file.path
-    if not os.path.exists(audio_path):
-        raise VideoGenerationError("Audio file could not be found on disk.")
-    return audio_path
-
-
-def _update_metadata(video: GeneratedVideo, *, file_path: str, duration: float, resolution: Iterable[int]) -> None:
-    width, height = resolution
-    video.file_size_bytes = os.path.getsize(file_path)
-    video.duration_seconds = int(duration)
-    video.resolution = f"{width}x{height}"
-    aspect_ratio = round(width / height, 2) if height else 0
-    video.aspect_ratio = f"{aspect_ratio}:1" if aspect_ratio else ""
+def _append_log(video, entries: List[str]) -> None:
+    if not entries:
+        return
+    combined_log = "\n".join(entries)
+    if video.generation_log:
+        video.generation_log = f"{video.generation_log}\n{combined_log}"
+    else:
+        video.generation_log = combined_log
 
 
-def _write_video_file(context: _GenerationContext, *, temp_path: str, resolution: Iterable[int], audio_path: str) -> float:
-    try:
-        from moviepy.editor import AudioFileClip, ColorClip, CompositeVideoClip
-    except ImportError as exc:  # pragma: no cover - exercised when dependency missing
-        raise VideoGenerationError(
-            "MoviePy is required to generate videos. Please install moviepy to continue."
-        ) from exc
-
-    width, height = resolution
-    context.append_log("Loading audio track into MoviePy.")
-    with AudioFileClip(audio_path) as audio_clip:
-        duration = max(audio_clip.duration, 1.0)
-        context.append_log(f"Audio duration detected: {duration:.2f}s. Creating visual clip.")
-        color_clip = ColorClip(size=(width, height), color=(0, 0, 0), duration=duration)
-        composite_clip = CompositeVideoClip([color_clip]).set_audio(audio_clip)
-        context.append_log("Writing rendered video to temporary file.")
-        composite_clip.write_videofile(
-            temp_path,
-            fps=24,
-            codec="libx264",
-            audio_codec="aac",
-            verbose=False,
-            logger=None,
-        )
-        composite_clip.close()
-    return duration
-
-
-def generate_video_for_instance(video: GeneratedVideo) -> GeneratedVideo:
+def generate_video_for_instance(video):
     """
     Receives a GeneratedVideo instance (or equivalent model).
     Updates its status and fields while generating a video file with MoviePy.
@@ -94,44 +38,72 @@ def generate_video_for_instance(video: GeneratedVideo) -> GeneratedVideo:
     Returns the updated instance.
     """
 
-    context = _GenerationContext(video=video, log_entries=[])
-    start = time.perf_counter()
-    temp_file_path = None
-    resolution = (1280, 720)
-    context.append_log("Starting AI video generation.")
-    video.status = "processing"
-    video.generation_progress = 10
-    video.error_message = ""
-    video.error_code = ""
-    context.flush_logs()
-    video.save(update_fields=["status", "generation_progress", "error_message", "error_code", "generation_log"])
+    log_entries: List[str] = []
+
+    def log_step(message: str) -> None:
+        logger.info(message)
+        log_entries.append(message)
+
+    start_time = time.monotonic()
+    log_step(f"Starting generation for video #{video.pk}: {video.title}")
 
     try:
-        audio_path = _validate_audio_path(video)
-        logger.info("[Video %s] Audio validation successful.", video.pk)
-        context.append_log("Audio validation successful.")
-        context.flush_logs()
+        video.status = "processing"
+        video.generation_progress = 10
+        video.error_message = ""
+        video.error_code = ""
+        video.save(update_fields=["status", "generation_progress", "error_message", "error_code"])
 
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_file:
-            temp_file_path = temp_file.name
+        audio_field = getattr(video, "audio_track", None)
+        audio_file = getattr(audio_field, "audio_file", None)
+        if not audio_file or not getattr(audio_file, "path", None) or not os.path.exists(audio_file.path):
+            raise VideoGenerationError("Audio file is missing for this video.", code="audio_missing")
 
-        context.append_log("Generating video content with MoviePy.")
-        context.flush_logs()
-        duration = _write_video_file(context, temp_path=temp_file_path, resolution=resolution, audio_path=audio_path)
-        context.flush_logs()
+        log_step(f"Loaded audio file from {audio_file.path}")
 
-        filename = f"generated_video_{video.pk or int(time.time())}.mp4"
-        context.append_log("Attaching generated video file to model.")
-        with open(temp_file_path, "rb") as generated_file:
-            video.video_file.save(filename, File(generated_file), save=False)
+        # Import MoviePy lazily so environments without the dependency can still load this module.
+        from moviepy.editor import AudioFileClip, ColorClip
 
-        _update_metadata(video, file_path=temp_file_path, duration=duration, resolution=resolution)
-        elapsed_ms = int((time.perf_counter() - start) * 1000)
-        video.generation_time_ms = elapsed_ms
+        audio_clip = AudioFileClip(audio_file.path)
+        duration_seconds = int(audio_clip.duration or 0)
+        duration_seconds = max(duration_seconds, 1)
+
+        base_width, base_height = 1280, 720
+        color_clip = ColorClip(size=(base_width, base_height), color=(10, 10, 10), duration=duration_seconds)
+        color_clip = color_clip.set_audio(audio_clip)
+
+        media_root = Path(settings.MEDIA_ROOT)
+        media_root.mkdir(parents=True, exist_ok=True)
+        output_dir = media_root / "videos"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        safe_title = slugify(video.title) or f"video-{video.pk}"
+        output_path = output_dir / f"{safe_title}-{int(time.time())}.mp4"
+
+        log_step(f"Writing video file to {output_path}")
+        color_clip.write_videofile(
+            output_path.as_posix(),
+            fps=24,
+            codec="libx264",
+            audio_codec="aac",
+            verbose=False,
+            logger=None,
+        )
+
+        color_clip.close()
+        audio_clip.close()
+
+        relative_path = output_path.relative_to(media_root)
+        video.video_file.name = relative_path.as_posix()
+        video.file_size_bytes = os.path.getsize(output_path)
+        video.duration_seconds = duration_seconds
+        video.resolution = f"{base_width}x{base_height}"
+        video.aspect_ratio = "16:9"
         video.status = "ready"
         video.generation_progress = 100
-        context.append_log(f"Video generation completed successfully in {elapsed_ms} ms.")
-        context.flush_logs()
+        video.generation_time_ms = int((time.monotonic() - start_time) * 1000)
+
+        log_step("Video generation completed successfully.")
+        _append_log(video, log_entries)
         video.save(
             update_fields=[
                 "video_file",
@@ -139,36 +111,32 @@ def generate_video_for_instance(video: GeneratedVideo) -> GeneratedVideo:
                 "duration_seconds",
                 "resolution",
                 "aspect_ratio",
+                "status",
+                "generation_progress",
                 "generation_time_ms",
-                "status",
-                "generation_progress",
                 "generation_log",
             ]
         )
-        logger.info("[Video %s] Generation finished.", video.pk)
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("[Video %s] Video generation failed.", video.pk)
-        context.append_log(f"Video generation failed: {exc}")
-        video.status = "failed"
-        video.generation_progress = 0
-        video.error_message = str(exc)
-        video.error_code = exc.__class__.__name__
-        context.flush_logs()
-        video.save(
-            update_fields=[
-                "status",
-                "generation_progress",
-                "error_message",
-                "error_code",
-                "generation_log",
-            ]
-        )
-        raise VideoGenerationError(str(exc)) from exc
-    finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except OSError:
-                logger.warning("Failed to clean up temporary file %s", temp_file_path)
+        return video
 
-    return video
+    except VideoGenerationError as exc:
+        log_step("Video generation failed due to a known error.")
+        _append_log(video, log_entries)
+        video.status = "failed"
+        video.error_message = str(exc)
+        video.error_code = exc.code
+        video.generation_progress = 0
+        video.save(
+            update_fields=["status", "error_message", "error_code", "generation_progress", "generation_log"]
+        )
+        raise
+    except Exception as exc:  # pragma: no cover - defensive catch
+        logger.exception("Unexpected error during video generation")
+        log_step(f"Unexpected error: {exc}")
+        _append_log(video, log_entries)
+        video.status = "failed"
+        video.error_message = str(exc)
+        video.generation_progress = 0
+        video.save(update_fields=["status", "error_message", "generation_progress", "generation_log"])
+        error_code = "import_error" if isinstance(exc, ImportError) else "unexpected"
+        raise VideoGenerationError("Unexpected error while generating the video.", code=error_code) from exc

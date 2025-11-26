@@ -1,6 +1,6 @@
 import logging
 import os
-from django.contrib.auth.decorators import login_required
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
@@ -22,10 +22,7 @@ from django.views import View
 from django.core.files.base import ContentFile
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
-from videos.services.video_generation import (
-    VideoGenerationError,
-    generate_video_for_instance,
-)
+from .services.video_generation import VideoGenerationError, generate_video_for_instance
 
 logger = logging.getLogger(__name__)
 
@@ -621,27 +618,24 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
-class GenerateAIVideoView(View):
+class GenerateVideoView(View):
     def post(self, request, pk):
         video = get_object_or_404(GeneratedVideo, pk=pk)
-        logger.info("Received AI video generation request for video %s.", video.pk)
+        logger.info("Starting AI video generation via UI for video %s", video.pk)
 
         try:
             generate_video_for_instance(video)
         except VideoGenerationError as exc:
-            logger.warning("AI video generation failed for video %s: %s", video.pk, exc)
+            logger.warning("Video generation failed for video %s: %s", video.pk, exc)
             messages.error(request, f"Failed to generate video: {exc}")
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Unexpected error during video generation for video %s.", video.pk)
-            messages.error(request, "An unexpected error occurred while generating the video.")
-        else:
-            ActivityLog.objects.create(
-                user=_activity_user(request),
-                action='generate_video',
-                object_type='GeneratedVideo',
-                object_id=video.id,
-                description=f"Generated AI video for {video.title}",
-            )
-            messages.success(request, 'AI video generated successfully.')
+            return redirect('video-detail', pk=pk)
 
-        return redirect('video-detail', pk=video.pk)
+        ActivityLog.objects.create(
+            user=_activity_user(request),
+            action='generate_video',
+            object_type='GeneratedVideo',
+            object_id=video.id,
+            description=f"Generated video {video.title}",
+        )
+        messages.success(request, 'AI video generated successfully.')
+        return redirect('video-detail', pk=pk)
