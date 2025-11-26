@@ -1,73 +1,115 @@
 {% extends 'videos/base.html' %}
 {% block title %}Videos{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h4 mb-0">Generated Videos</h1>
-    <a class="btn btn-primary" href="{% url 'video-create' %}">Create Video</a>
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1 class="h4 mb-1">Generated Videos</h1>
+        <p class="text-muted mb-0">Browse, filter, and generate AI-powered music videos.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+        <a class="btn btn-primary" href="{% url 'video-create' %}"><i class="bi bi-plus-circle"></i> Create Video</a>
+    </div>
 </div>
-<form method="get" class="row g-2 mb-3">
-    <div class="col-md-3">
-        <input type="text" name="search" value="{{ request.GET.search }}" placeholder="Search" class="form-control">
-    </div>
-    <div class="col-md-3">
-        <select name="status" class="form-select">
-            <option value="">Status</option>
-            {% for key, label in videos.model.STATUS_CHOICES %}
-                <option value="{{ key }}" {% if request.GET.status == key %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="col-md-3">
-        <select name="mood" class="form-select">
-            <option value="">Mood</option>
-            {% for key, label in videos.model.MOOD_CHOICES %}
-                <option value="{{ key }}" {% if request.GET.mood == key %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="col-md-3">
-        <button class="btn btn-outline-secondary w-100" type="submit">Filter</button>
+
+<form method="get" class="card card-shadow mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small text-muted">Search</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" name="search" value="{{ request.GET.search }}" placeholder="Search by title or tags" class="form-control">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">Any status</option>
+                    {% for key, label in videos.model.STATUS_CHOICES %}
+                        <option value="{{ key }}" {% if request.GET.status == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted">Mood</label>
+                <select name="mood" class="form-select">
+                    <option value="">Any mood</option>
+                    {% for key, label in videos.model.MOOD_CHOICES %}
+                        <option value="{{ key }}" {% if request.GET.mood == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button class="btn btn-primary" type="submit"><i class="bi bi-funnel"></i> Apply</button>
+            </div>
+        </div>
     </div>
 </form>
-<div class="table-responsive">
-    <table class="table table-striped align-middle">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Audio</th>
-                <th>Status</th>
-                <th>Mood</th>
-                <th>Updated</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for video in videos %}
+
+<div class="card card-shadow">
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle mb-0">
+            <thead class="table-light">
                 <tr>
-                    <td><a href="{% url 'video-detail' video.pk %}">{{ video.title }}</a></td>
-                    <td>{{ video.audio_track }}</td>
-                    <td>{{ video.get_status_display }}</td>
-                    <td>{{ video.get_mood_display|default:'-' }}</td>
-                    <td>{{ video.updated_at|date:'Y-m-d H:i' }}</td>
-                    <td class="text-end">
-                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'video-edit' video.pk %}">Edit</a>
-                    </td>
+                    <th style="width: 90px;">Thumbnail</th>
+                    <th>Title</th>
+                    <th>Audio</th>
+                    <th>Mood</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th class="text-end">Actions</th>
                 </tr>
-            {% empty %}
-                <tr><td colspan="6" class="text-center">No videos found.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for video in videos %}
+                    <tr>
+                        <td>
+                            {% if video.thumbnail %}
+                                <img src="{{ video.thumbnail.url }}" alt="Thumbnail" class="img-thumbnail" style="max-width: 80px;">
+                            {% else %}
+                                <div class="bg-light border rounded text-center p-3 text-muted" style="width:80px; height:60px;">
+                                    <i class="bi bi-camera-video fs-4"></i>
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td class="fw-semibold">
+                            <a class="text-decoration-none" href="{% url 'video-detail' video.pk %}">{{ video.title }}</a>
+                        </td>
+                        <td>{{ video.audio_track.title }}</td>
+                        <td class="text-capitalize">{{ video.get_mood_display|default:'-' }}</td>
+                        <td>{% include 'videos/partials/status_badge.html' with status=video.status %}</td>
+                        <td>{{ video.created_at|date:'Y-m-d H:i' }}</td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a class="btn btn-outline-secondary" href="{% url 'video-detail' video.pk %}">View</a>
+                                <a class="btn btn-outline-secondary" href="{% url 'video-edit' video.pk %}">Edit</a>
+                                <a class="btn btn-outline-secondary" href="{% url 'video-delete' video.pk %}">Delete</a>
+                                <a class="btn btn-primary" href="{% url 'video-detail' video.pk %}#generate">Generate</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">No videos found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
+
 {% if is_paginated %}
-<nav>
-    <ul class="pagination">
+<nav aria-label="Page navigation" class="mt-3">
+    <ul class="pagination justify-content-center">
         {% if page_obj.has_previous %}
             <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>
+        {% else %}
+            <li class="page-item disabled"><span class="page-link">Previous</span></li>
         {% endif %}
         <li class="page-item active"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
         {% if page_obj.has_next %}
             <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>
+        {% else %}
+            <li class="page-item disabled"><span class="page-link">Next</span></li>
         {% endif %}
     </ul>
 </nav>

@@ -3,8 +3,9 @@ from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
+from django.views.decorators.http import require_POST
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -16,6 +17,16 @@ from django.views.generic import (
 
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+
+
+STATUS_BADGE_CLASSES = {
+    "ready": "success",
+    "processing": "warning text-dark",
+    "pending": "secondary",
+    "failed": "danger",
+    "draft": "light text-dark",
+    "archived": "dark",
+}
 
 
 def _activity_user(request):
@@ -41,12 +52,24 @@ class DashboardView(TemplateView):
         context = super().get_context_data(**kwargs)
         try:
             videos = GeneratedVideo.objects.all()
+            status_counts = list(videos.values('status').annotate(total=Count('id')))
+            status_map = {item['status']: item['total'] for item in status_counts}
+            status_order = ["ready", "processing", "pending", "failed", "draft", "archived"]
+            context['status_summary'] = [
+                {
+                    "key": status,
+                    "label": dict(GeneratedVideo.STATUS_CHOICES).get(status, status.title()),
+                    "count": status_map.get(status, 0),
+                }
+                for status in status_order
+            ]
+            context['status_ready'] = status_map.get('ready', 0)
+            context['status_classes'] = STATUS_BADGE_CLASSES
             context['total_videos'] = videos.count()
-            context['status_counts'] = list(videos.values('status').annotate(total=Count('id')))
             context['mood_counts'] = list(videos.values('mood').annotate(total=Count('id')))
             context['total_audio'] = AudioTrack.objects.count()
             context['total_projects'] = VideoProject.objects.count()
-            context['recent_videos'] = list(videos.order_by('-created_at')[:5])
+            context['recent_videos'] = list(videos.select_related('audio_track').order_by('-created_at')[:5])
         except OperationalError as exc:
             messages.error(
                 self.request,
@@ -55,11 +78,12 @@ class DashboardView(TemplateView):
             )
             context.update(
                 total_videos=0,
-                status_counts=[],
+                status_summary=[],
                 mood_counts=[],
                 total_audio=0,
                 total_projects=0,
                 recent_videos=[],
+                status_ready=0,
             )
         return context
 
@@ -101,6 +125,15 @@ class GeneratedVideoDetailView(DetailView):
     model = GeneratedVideo
     template_name = 'videos/video_detail.html'
     context_object_name = 'video'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        tags = []
+        if self.object.tags:
+            tags = [tag.strip() for tag in self.object.tags.split(',') if tag.strip()]
+        context['tags'] = tags
+        context['status_classes'] = STATUS_BADGE_CLASSES
+        return context
 
 
 class GeneratedVideoCreateView(CreateView):
@@ -185,6 +218,32 @@ class GeneratedVideoDeleteView(StaffRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
+@require_POST
+def generate_video(request, pk):
+    video = get_object_or_404(GeneratedVideo, pk=pk)
+
+    if video.status == "processing":
+        messages.info(request, "Video generation already in progress.")
+        return redirect('video-detail', pk=video.pk)
+
+    try:
+        generator = getattr(video, "generate_ai_video", None)
+        if callable(generator):
+            generator()
+        ActivityLog.objects.create(
+            user=_activity_user(request),
+            action='generate_video',
+            object_type='GeneratedVideo',
+            object_id=video.id,
+            description=f"Triggered generation for {video.title}",
+        )
+        messages.success(request, "Video generated successfully.")
+    except Exception as exc:  # pragma: no cover - surface errors to user
+        messages.error(request, f"Video generation failed: {exc}")
+
+    return redirect('video-detail', pk=video.pk)
+
+
 class AudioTrackListView(ListView):
     model = AudioTrack
     template_name = 'videos/audio_list.html'
@@ -196,6 +255,12 @@ class AudioTrackDetailView(DetailView):
     model = AudioTrack
     template_name = 'videos/audio_detail.html'
     context_object_name = 'audio'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['related_videos'] = self.object.videos.select_related('audio_track').order_by('-created_at')
+        context['status_classes'] = STATUS_BADGE_CLASSES
+        return context
 
 
 class AudioTrackCreateView(CreateView):
