@@ -8,6 +8,7 @@ urlpatterns = [
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
     path('videos/', views.GeneratedVideoListView.as_view(), name='video-list'),
     path('videos/create/', views.GeneratedVideoCreateView.as_view(), name='video-create'),
+    path('videos/<int:pk>/generate/', views.generate_video, name='video_generate'),
     path('videos/<int:pk>/', views.GeneratedVideoDetailView.as_view(), name='video-detail'),
     path('videos/<int:pk>/generate/', views.video_generate, name='video-generate'),
     path('videos/<int:pk>/edit/', views.GeneratedVideoUpdateView.as_view(), name='video-edit'),

@@ -1,65 +1,176 @@
 {% extends 'videos/base.html' %}
 {% block title %}{{ video.title }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between flex-wrap gap-2 align-items-start mb-4">
     <div>
-        <h1 class="h4 mb-0">{{ video.title }}</h1>
-        <p class="text-muted mb-0">{{ video.audio_track }}</p>
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <h1 class="h4 mb-0">{{ video.title }}</h1>
+            {% include 'videos/partials/status_badge.html' with status=video.status %}
+            {% if video.mood %}<span class="badge bg-info text-dark text-capitalize">{{ video.mood }}</span>{% endif %}
+        </div>
+        <p class="text-muted mb-1">Audio track: {{ video.audio_track }}</p>
+        {% if tags %}
+            <div class="d-flex flex-wrap gap-1">
+                {% for tag in tags %}
+                    <span class="badge bg-light text-dark border">{{ tag }}</span>
+                {% endfor %}
+            </div>
+        {% endif %}
     </div>
-    <div class="btn-group">
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'video-edit' video.pk %}">Edit</a>
-        <a class="btn btn-outline-danger btn-sm" href="{% url 'video-delete' video.pk %}">Delete</a>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'video-list' %}"><i class="bi bi-arrow-left"></i> Back to list</a>
+        <a class="btn btn-outline-secondary" href="{% url 'video-edit' video.pk %}"><i class="bi bi-pencil"></i> Edit</a>
+        {% if user.is_staff %}
+            <a class="btn btn-outline-danger" href="{% url 'video-delete' video.pk %}"><i class="bi bi-trash"></i> Delete</a>
+        {% endif %}
     </div>
 </div>
-<div class="row g-3">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">Description</div>
+
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card card-shadow mb-3" id="generate">
+            <div class="card-body">
+                {% if video.video_file %}
+                    <video class="w-100 rounded" controls src="{{ video.video_file.url }}"></video>
+                {% else %}
+                    <div class="border rounded p-4 text-center bg-light">
+                        <i class="bi bi-film fs-1 text-muted"></i>
+                        <p class="mb-0 text-muted">No video generated yet.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card card-shadow mb-3">
+            <div class="card-header bg-white fw-semibold">Description</div>
             <div class="card-body">
                 <p class="mb-0">{{ video.description|default:'No description provided.' }}</p>
             </div>
         </div>
-        <div class="card mt-3">
-            <div class="card-header">Metadata</div>
-            <table class="table mb-0">
-                <tr><th>Status</th><td>{{ video.get_status_display }}</td></tr>
-                <tr><th>Mood</th><td>{{ video.get_mood_display|default:'-' }}</td></tr>
-                <tr><th>Resolution</th><td>{{ video.resolution|default:'-' }}</td></tr>
-                <tr><th>Aspect Ratio</th><td>{{ video.aspect_ratio|default:'-' }}</td></tr>
-                <tr><th>Duration (s)</th><td>{{ video.duration_seconds|default:'-' }}</td></tr>
-                <tr><th>File Size (bytes)</th><td>{{ video.file_size_bytes|default:'-' }}</td></tr>
-                <tr><th>Tags</th><td>{{ video.tags|default:'-' }}</td></tr>
-                <tr><th>Prompt</th><td>{{ video.prompt_used|default:'-' }}</td></tr>
-                <tr><th>Model</th><td>{{ video.model_name|default:'-' }}</td></tr>
-                <tr><th>Seed</th><td>{{ video.seed|default:'-' }}</td></tr>
-                <tr><th>Generation Time (ms)</th><td>{{ video.generation_time_ms|default:'-' }}</td></tr>
-                <tr><th>Generation Progress</th><td>{{ video.generation_progress }}%</td></tr>
-                <tr><th>Error Code</th><td>{{ video.error_code|default:'-' }}</td></tr>
-                <tr><th>Error Message</th><td>{{ video.error_message|default:'-' }}</td></tr>
-            </table>
-        </div>
     </div>
     <div class="col-md-4">
         <div class="card mb-3">
-            <div class="card-header">Video File</div>
+            <div class="card-header">AI Generation</div>
             <div class="card-body">
-                {% if video.video_file %}
-                    <a href="{{ video.video_file.url }}" class="btn btn-primary w-100">Download</a>
-                {% else %}
-                    <p class="mb-0 text-muted">No video file uploaded.</p>
-                {% endif %}
+                <form id="generateVideoForm" method="post" action="">
+                    {% csrf_token %}
+                    <p class="text-muted small">Kick off a fresh AI render using the current track and settings.</p>
+                    <button type="button" class="btn btn-primary w-100" id="generateVideoTrigger">Generate AI Video</button>
+                </form>
             </div>
         </div>
-        <div class="card">
-            <div class="card-header">Thumbnail</div>
-            <div class="card-body text-center">
-                {% if video.thumbnail %}
-                    <img class="img-fluid" src="{{ video.thumbnail.url }}" alt="Thumbnail">
-                {% else %}
-                    <p class="mb-0 text-muted">No thumbnail available.</p>
+        <div class="card mb-3">
+            <div class="card-header">Video File</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-semibold">Status</span>
+                        {% include 'videos/partials/status_badge.html' with status=video.status %}
+                    </div>
+                    <div class="progress" role="progressbar" aria-valuenow="{{ video.generation_progress }}" aria-valuemin="0" aria-valuemax="100">
+                        <div class="progress-bar" style="width: {{ video.generation_progress }}%"></div>
+                    </div>
+                </div>
+                <dl class="row mb-0 small">
+                    <dt class="col-6">Prompt</dt><dd class="col-6">{{ video.prompt_used|default:'-' }}</dd>
+                    <dt class="col-6">Model</dt><dd class="col-6">{{ video.model_name|default:'-' }}</dd>
+                    <dt class="col-6">Seed</dt><dd class="col-6">{{ video.seed|default:'-' }}</dd>
+                    <dt class="col-6">Generation time</dt><dd class="col-6">{{ video.generation_time_ms|default:'-' }} ms</dd>
+                    <dt class="col-6">Generation log</dt><dd class="col-6 text-break">{{ video.generation_log|default:'-' }}</dd>
+                </dl>
+                {% if video.status == 'failed' and video.error_message %}
+                    <div class="alert alert-danger mt-3">{{ video.error_message }}</div>
                 {% endif %}
+                <form method="post" action="{% url 'video_generate' video.id %}" class="mt-3" id="generate-form">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary w-100" id="generate-btn" {% if video.status == 'processing' %}disabled{% endif %}>
+                        <i class="bi bi-magic"></i> Generate AI Video
+                    </button>
+                </form>
+            </div>
+        </div>
+        <div class="card card-shadow mb-3">
+            <div class="card-header bg-white fw-semibold">Video Metadata</div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-6">Duration</dt><dd class="col-6">{{ video.duration_seconds|default:'-' }} s</dd>
+                    <dt class="col-6">Resolution</dt><dd class="col-6">{{ video.resolution|default:'-' }}</dd>
+                    <dt class="col-6">Aspect ratio</dt><dd class="col-6">{{ video.aspect_ratio|default:'-' }}</dd>
+                    <dt class="col-6">File size</dt><dd class="col-6">{{ video.file_size_bytes|default:'-' }} bytes</dd>
+                </dl>
+            </div>
+        </div>
+        <div class="card card-shadow">
+            <div class="card-header bg-white fw-semibold">Audio Track</div>
+            <div class="card-body">
+                <p class="mb-1 fw-semibold">{{ video.audio_track.title }}</p>
+                <p class="mb-1 text-muted small">{{ video.audio_track.artist|default:'Unknown artist' }}</p>
+                <p class="mb-0 small">Language: {{ video.audio_track.language|default:'-' }}</p>
             </div>
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="confirmGenerateModal" tabindex="-1" aria-labelledby="confirmGenerateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmGenerateModalLabel">Generate AI Video</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0">Do you want to generate a new AI video for this track?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmGenerateButton">Generate</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const generateForm = document.getElementById('generateVideoForm');
+        const triggerButton = document.getElementById('generateVideoTrigger');
+        const confirmButton = document.getElementById('confirmGenerateButton');
+        const modalElement = document.getElementById('confirmGenerateModal');
+        const modalInstance = modalElement ? new bootstrap.Modal(modalElement) : null;
+
+        function submitGenerationForm() {
+            if (!generateForm) return;
+            if (window.GenerationUI && typeof window.GenerationUI.showGenerationLoader === 'function') {
+                window.GenerationUI.showGenerationLoader();
+            }
+            generateForm.submit();
+        }
+
+        triggerButton?.addEventListener('click', function (event) {
+            event.preventDefault();
+            modalInstance?.show();
+        });
+
+        confirmButton?.addEventListener('click', function () {
+            modalInstance?.hide();
+            submitGenerationForm();
+        });
+
+        generateForm?.addEventListener('submit', function () {
+            if (window.GenerationUI && typeof window.GenerationUI.showGenerationLoader === 'function') {
+                window.GenerationUI.showGenerationLoader();
+            }
+        });
+    });
+</script>
+{% endblock %}
+{% block extra_js %}
+<script>
+    const generateForm = document.getElementById('generate-form');
+    const generateBtn = document.getElementById('generate-btn');
+    if (generateForm && generateBtn) {
+        generateForm.addEventListener('submit', function () {
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Generating, please wait…';
+        });
+    }
+</script>
 {% endblock %}
