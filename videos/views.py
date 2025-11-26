@@ -1,9 +1,10 @@
+import logging
 import os
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
     CreateView,
@@ -16,6 +17,10 @@ from django.views.generic import (
 
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from .services.video_generation import generate_video_for_instance
+
+
+logger = logging.getLogger(__name__)
 
 
 def _activity_user(request):
@@ -101,6 +106,22 @@ class GeneratedVideoDetailView(DetailView):
     model = GeneratedVideo
     template_name = 'videos/video_detail.html'
     context_object_name = 'video'
+
+
+def generate_ai_video(request, pk):
+    video = get_object_or_404(
+        GeneratedVideo.objects.select_related('audio_track'), pk=pk
+    )
+
+    logger.info("Triggering AI video generation for video %s", video.pk)
+    video = generate_video_for_instance(video)
+
+    if video.status == "ready":
+        messages.success(request, "Video generated successfully.")
+    else:
+        messages.error(request, video.error_message or "Video generation failed.")
+
+    return redirect('video-detail', pk=video.pk)
 
 
 class GeneratedVideoCreateView(CreateView):
