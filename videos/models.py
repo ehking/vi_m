@@ -52,6 +52,14 @@ class GeneratedVideo(models.Model):
     resolution = models.CharField(max_length=50, blank=True)
     aspect_ratio = models.CharField(max_length=20, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    STATUS_BADGE_CLASSES = {
+        "draft": "secondary",
+        "pending": "info",
+        "processing": "warning",
+        "ready": "success",
+        "failed": "danger",
+        "archived": "secondary",
+    }
     error_message = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     tags = models.TextField(blank=True)
@@ -59,7 +67,7 @@ class GeneratedVideo(models.Model):
     prompt_used = models.TextField(blank=True)
     model_name = models.CharField(max_length=100, blank=True)
     generation_time_ms = models.IntegerField(null=True, blank=True)
-    generation_progress = models.PositiveIntegerField(default=0, blank=True)
+    generation_progress = models.IntegerField(null=True, blank=True)
     generation_log = models.TextField(blank=True)
     error_code = models.CharField(max_length=100, blank=True)
     seed = models.IntegerField(null=True, blank=True)
@@ -71,6 +79,10 @@ class GeneratedVideo(models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def status_badge_class(self):
+        return self.STATUS_BADGE_CLASSES.get(self.status, "secondary")
 
 
 class VideoProject(models.Model):

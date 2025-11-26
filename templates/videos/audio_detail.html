@@ -1,24 +1,76 @@
 {% extends 'videos/base.html' %}
 {% block title %}{{ audio.title }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
     <div>
-        <h1 class="h4 mb-0">{{ audio.title }}</h1>
+        <h1 class="h4 mb-1">{{ audio.title }}</h1>
         <p class="text-muted mb-0">{{ audio.artist|default:'Unknown artist' }}</p>
     </div>
     <div class="btn-group">
+        <form method="post" action="{% url 'audio-generate-video' audio.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success btn-sm">Generate AI Video</button>
+        </form>
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'audio-edit' audio.pk %}">Edit</a>
         <a class="btn btn-outline-danger btn-sm" href="{% url 'audio-delete' audio.pk %}">Delete</a>
     </div>
 </div>
-<div class="card">
-    <div class="card-header">Details</div>
-    <table class="table mb-0">
-        <tr><th>Language</th><td>{{ audio.language|default:'-' }}</td></tr>
-        <tr><th>BPM</th><td>{{ audio.bpm|default:'-' }}</td></tr>
-        <tr><th>Lyrics</th><td>{{ audio.lyrics|linebreaks|default:'No lyrics provided.' }}</td></tr>
-        <tr><th>Audio File</th><td>{% if audio.audio_file %}<a href="{{ audio.audio_file.url }}">Download</a>{% else %}-{% endif %}</td></tr>
-        <tr><th>Created</th><td>{{ audio.created_at|date:'Y-m-d H:i' }}</td></tr>
-    </table>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card card-shadow mb-3">
+            <div class="card-header bg-white fw-semibold">Details</div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-5">Language</dt><dd class="col-7">{{ audio.language|default:'-' }}</dd>
+                    <dt class="col-5">BPM</dt><dd class="col-7">{{ audio.bpm|default:'-' }}</dd>
+                    <dt class="col-5">Audio File</dt>
+                    <dd class="col-7">{% if audio.audio_file %}<a href="{{ audio.audio_file.url }}">Download</a>{% else %}-{% endif %}</dd>
+                    <dt class="col-5">Created</dt><dd class="col-7">{{ audio.created_at|date:'Y-m-d H:i' }}</dd>
+                </dl>
+            </div>
+        </div>
+        <div class="card card-shadow">
+            <div class="card-header bg-white fw-semibold">Lyrics</div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                {{ audio.lyrics|linebreaks|default:'No lyrics provided.' }}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card card-shadow h-100">
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+                <span>Related Videos</span>
+                <a class="btn btn-sm btn-primary" href="{% url 'video-create' %}"><i class="bi bi-plus-circle"></i> New video</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Title</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for video in related_videos %}
+                            <tr>
+                                <td class="fw-semibold">{{ video.title }}</td>
+                                <td>{% include 'videos/partials/status_badge.html' with status=video.status %}</td>
+                                <td class="text-end">
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <a class="btn btn-outline-secondary" href="{% url 'video-detail' video.pk %}">View</a>
+                                        <a class="btn btn-primary" href="{% url 'video-detail' video.pk %}#generate">Generate</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="3" class="text-center text-muted py-4">No videos linked yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
