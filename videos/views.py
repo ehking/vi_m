@@ -71,6 +71,7 @@ class GeneratedVideoCreateView(LoginRequiredMixin, CreateView):
     model = GeneratedVideo
     form_class = GeneratedVideoForm
     template_name = 'videos/video_form.html'
+    success_url = reverse_lazy('video-list')
 
     def form_valid(self, form):
         response = super().form_valid(form)
@@ -102,6 +103,7 @@ class GeneratedVideoUpdateView(LoginRequiredMixin, UpdateView):
     model = GeneratedVideo
     form_class = GeneratedVideoForm
     template_name = 'videos/video_form.html'
+    success_url = reverse_lazy('video-list')
 
     def form_valid(self, form):
         response = super().form_valid(form)
