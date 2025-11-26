@@ -11,6 +11,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AlterField(
+            model_name="generatedvideo",
+            name="generation_progress",
+            field=models.IntegerField(blank=True, null=True),
+        ),
         migrations.AddField(
             model_name="generatedvideo",
             name="current_stage",
