@@ -23,5 +23,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_METHOD: squash           # می‌تونی به merge یا rebase تغییر بدی
-          MERGE_DELETE_BRANCH: 'true'    # بعد از merge، branch حذف میشه
-          MERGE_FORKS: 'false'           # از فورک‌ها مرج نمیکنه (امن‌تر)
+          MERGE_LABELS: ""               # خیلی مهم: همه‌ی PRها رو اجازه مرج بده
+          MERGE_DELETE_BRANCH: "true"    # بعد از مرج، برنچ رو پاک کن
+          MERGE_FORKS: "false"           # از فورک‌ها مرج نکن (برای امنیت)
