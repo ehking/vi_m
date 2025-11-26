@@ -16,9 +16,9 @@ A local-first Django application for managing audio tracks and AI-generated musi
 python manage.py migrate
 ```
 
-Run migrations again whenever you pull new changes so newly added columns (for example, generation
-progress and logging fields) are created in your local database and the dashboard can load without
-errors.
+If you see errors like `no such column: videos_generatedvideo.generation_progress` when loading the
+video list, it means your local SQLite database is missing the latest schema changes. Re-run the
+`migrate` command above to create the new columns and retry the page.
 
 ## Create superuser
 
