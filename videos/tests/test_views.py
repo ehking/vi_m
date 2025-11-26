@@ -3,50 +3,62 @@ import tempfile
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from videos.models import AudioTrack, GeneratedVideo
+from videos.services.video_generation import VideoGenerationError
 
 
-@override_settings(MEDIA_ROOT=tempfile.gettempdir())
-class GenerateAIVideoViewTests(TestCase):
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class GenerateVideoViewTests(TestCase):
     def setUp(self):
         User = get_user_model()
-        self.user = User.objects.create_user(username="tester", password="password")
-        self.client.login(username="tester", password="password")
+        self.user = User.objects.create_user(username="creator", password="password")
+        audio_file = SimpleUploadedFile("test.mp3", b"audio", content_type="audio/mpeg")
+        self.audio = AudioTrack.objects.create(title="Song", audio_file=audio_file)
+        self.video = GeneratedVideo.objects.create(audio_track=self.audio, title="Video")
 
-        self.audio = AudioTrack.objects.create(
-            title="Song", artist="Artist", audio_file=SimpleUploadedFile("song.mp3", b"audio", content_type="audio/mpeg")
-        )
-        self.video = GeneratedVideo.objects.create(audio_track=self.audio, title="Draft", status="pending")
+    def test_generate_view_success(self):
+        self.client.login(username="creator", password="password")
+        generate_mock = mock.Mock()
 
-    def test_generate_ai_video_success(self):
-        with mock.patch("videos.views.generate_video_for_audio") as generate_mock:
-            generate_mock.return_value = (b"video-bytes", 42)
+        def _generate(video):
+            video.status = "ready"
+            video.video_file.name = "videos/generated.mp4"
+            video.save(update_fields=["status", "video_file"])
+            return video
 
-            response = self.client.post(reverse("generate-ai-video", args=[self.video.pk]))
+        generate_mock.side_effect = _generate
+
+        with mock.patch("videos.views.generate_video_for_instance", generate_mock):
+            response = self.client.post(reverse("video-generate", args=[self.video.pk]))
 
         self.assertRedirects(response, reverse("video-detail", args=[self.video.pk]))
-        self.video.refresh_from_db()
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("Video generated successfully" in str(m) for m in messages))
 
+        self.video.refresh_from_db()
         self.assertEqual(self.video.status, "ready")
-        self.assertEqual(self.video.duration_seconds, 42)
-        self.assertFalse(self.video.error_message)
-        self.assertTrue(self.video.video_file.name.endswith(".mp4"))
-        self.assertTrue(os.path.exists(self.video.video_file.path))
+        self.assertTrue(self.video.video_file.name)
 
-    def test_generate_ai_video_failure(self):
-        with mock.patch("videos.views.generate_video_for_audio") as generate_mock:
-            generate_mock.side_effect = RuntimeError("moviepy exploded")
+    def test_generate_view_failure(self):
+        self.client.login(username="creator", password="password")
 
-            response = self.client.post(reverse("generate-ai-video", args=[self.video.pk]))
+        def _fail(video):
+            video.status = "failed"
+            video.error_message = "Generation error"
+            video.save(update_fields=["status", "error_message"])
+            raise VideoGenerationError("Generation error")
+
+        with mock.patch("videos.views.generate_video_for_instance", side_effect=_fail):
+            response = self.client.post(reverse("video-generate", args=[self.video.pk]))
 
         self.assertRedirects(response, reverse("video-detail", args=[self.video.pk]))
-        self.video.refresh_from_db()
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("Video generation failed" in str(m) for m in messages))
 
+        self.video.refresh_from_db()
         self.assertEqual(self.video.status, "failed")
-        self.assertIn("moviepy exploded", self.video.error_message)
-        self.assertFalse(self.video.video_file)
-        self.assertIsNone(self.video.duration_seconds)

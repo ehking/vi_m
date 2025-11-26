@@ -2,6 +2,7 @@ import logging
 import os
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
@@ -19,8 +20,8 @@ from django.views import View
 
 from django.core.files.base import ContentFile
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
-from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoGenerationLog, VideoProject
-from .services.video_generation import generate_video_for_instance
+from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from .services.video_generation import generate_video_for_instance, VideoGenerationError
 
 
 def _activity_user(request):
@@ -30,20 +31,21 @@ def _activity_user(request):
     return None
 
 
-def _status_summary():
-    summary = {
-        key: {
-            "key": key,
-            "label": label,
-            "total": 0,
-            "badge": GeneratedVideo.STATUS_BADGE_CLASSES.get(key, "secondary"),
-        }
-        for key, label in GeneratedVideo.STATUS_CHOICES
-    }
-    for row in GeneratedVideo.objects.values('status').annotate(total=Count('id')):
-        if row['status'] in summary:
-            summary[row['status']]['total'] = row['total']
-    return list(summary.values())
+@login_required
+def generate_video(request, pk):
+    video = get_object_or_404(GeneratedVideo, pk=pk)
+
+    try:
+        generate_video_for_instance(video)
+    except VideoGenerationError as exc:
+        messages.error(request, f"Video generation failed: {exc}")
+    else:
+        if video.status == "ready":
+            messages.success(request, "Video generated successfully.")
+        else:
+            messages.error(request, "Video generation did not complete successfully.")
+
+    return redirect('video-detail', pk=video.pk)
 
 
 class StaffRequiredMixin(UserPassesTestMixin):
