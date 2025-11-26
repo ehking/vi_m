@@ -9,6 +9,10 @@
     <div class="btn-group">
         <a class="btn btn-outline-secondary btn-sm" href="{% url 'video-edit' video.pk %}">Edit</a>
         <a class="btn btn-outline-danger btn-sm" href="{% url 'video-delete' video.pk %}">Delete</a>
+        <form method="post" action="{% url 'video-generate' video.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-primary btn-sm" type="submit">Generate AI Video</button>
+        </form>
     </div>
 </div>
 <div class="row g-3">
@@ -37,6 +41,16 @@
                 <tr><th>Error Code</th><td>{{ video.error_code|default:'-' }}</td></tr>
                 <tr><th>Error Message</th><td>{{ video.error_message|default:'-' }}</td></tr>
             </table>
+        </div>
+        <div class="card mt-3">
+            <div class="card-header">Generation Log</div>
+            <div class="card-body">
+                {% if video.generation_log %}
+                    <pre class="mb-0" style="white-space: pre-wrap;">{{ video.generation_log }}</pre>
+                {% else %}
+                    <p class="text-muted mb-0">No generation log available yet.</p>
+                {% endif %}
+            </div>
         </div>
     </div>
     <div class="col-md-4">

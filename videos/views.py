@@ -1,10 +1,12 @@
+import logging
 import os
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
+from django.views import View
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -16,6 +18,9 @@ from django.views.generic import (
 
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from .services import generate_video_for_instance
+
+logger = logging.getLogger(__name__)
 
 
 def _activity_user(request):
@@ -101,6 +106,23 @@ class GeneratedVideoDetailView(DetailView):
     model = GeneratedVideo
     template_name = 'videos/video_detail.html'
     context_object_name = 'video'
+
+
+class GenerateAIVideoView(View):
+    def post(self, request, pk):
+        video = get_object_or_404(GeneratedVideo, pk=pk)
+        try:
+            generate_video_for_instance(video)
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to generate video %s", video.pk)
+            messages.error(request, "Failed to generate the video. Please try again.")
+            return redirect('video-detail', pk=video.pk)
+
+        if video.status == "ready":
+            messages.success(request, "Video generated successfully.")
+        else:
+            messages.error(request, video.error_message or "Video generation failed.")
+        return redirect('video-detail', pk=video.pk)
 
 
 class GeneratedVideoCreateView(CreateView):
@@ -196,6 +218,11 @@ class AudioTrackDetailView(DetailView):
     model = AudioTrack
     template_name = 'videos/audio_detail.html'
     context_object_name = 'audio'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["related_videos"] = self.object.videos.order_by("-created_at")
+        return context
 
 
 class AudioTrackCreateView(CreateView):
