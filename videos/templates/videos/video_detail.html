@@ -22,6 +22,15 @@
             <img src="{{ video.thumbnail.url }}" class="img-fluid mb-3" alt="thumbnail">
         {% endif %}
         <p><strong>Status:</strong> <span class="badge bg-info text-dark">{{ video.status|capfirst }}</span></p>
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <strong>Progress</strong>
+                <span class="text-muted small">{{ video.generation_progress }}%</span>
+            </div>
+            <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ video.generation_progress }}">
+                <div class="progress-bar bg-success" style="width: {{ video.generation_progress }}%"></div>
+            </div>
+        </div>
         <p><strong>Mood:</strong> {{ video.mood|default:'-'|capfirst }}</p>
         <p><strong>Created:</strong> {{ video.created_at }}</p>
         <p><strong>Updated:</strong> {{ video.updated_at }}</p>
@@ -29,6 +38,7 @@
         <p><strong>File Size:</strong> {{ video.file_size_bytes|default:'-' }} bytes</p>
         <p><strong>Resolution:</strong> {{ video.resolution|default:'-' }}</p>
         <p><strong>Aspect Ratio:</strong> {{ video.aspect_ratio|default:'-' }}</p>
+        <p><strong>Error Code:</strong> {{ video.error_code|default:'-' }}</p>
         {% if video.error_message %}
             <div class="alert alert-danger">Error: {{ video.error_message }}</div>
         {% endif %}
@@ -52,6 +62,16 @@
         <p><a href="{% url 'audio-detail' video.audio_track.pk %}">{{ video.audio_track.title }}</a> by {{ video.audio_track.artist|default:'Unknown' }}</p>
         <p><strong>Language:</strong> {{ video.audio_track.language|default:'-' }}</p>
         <p><strong>Lyrics:</strong> {{ video.audio_track.lyrics|truncatechars:150 }}</p>
+    </div>
+</div>
+<div class="card mb-4">
+    <div class="card-header">Generation Log</div>
+    <div class="card-body">
+        {% if video.generation_log %}
+            <pre class="mb-0" style="white-space: pre-wrap;">{{ video.generation_log }}</pre>
+        {% else %}
+            <p class="text-muted mb-0">No generation log available yet.</p>
+        {% endif %}
     </div>
 </div>
 <div class="card">

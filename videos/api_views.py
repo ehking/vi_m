@@ -30,10 +30,41 @@ class GeneratedVideoViewSet(viewsets.ModelViewSet):
         video = self.get_object()
         status_value = request.data.get('status')
         error_message = request.data.get('error_message', '')
+        error_code = request.data.get('error_code', '')
+        generation_log = request.data.get('generation_log')
+        progress_value = request.data.get('generation_progress')
+        fields_to_update = []
+
         if status_value:
             video.status = status_value
+            fields_to_update.append('status')
+
         video.error_message = error_message
-        video.save(update_fields=['status', 'error_message'])
+        fields_to_update.append('error_message')
+
+        if error_code is not None:
+            video.error_code = error_code
+            fields_to_update.append('error_code')
+
+        if progress_value is not None:
+            try:
+                video.generation_progress = max(0, min(100, int(progress_value)))
+                fields_to_update.append('generation_progress')
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "generation_progress must be an integer between 0 and 100."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if generation_log is not None:
+            log_entry = str(generation_log)
+            if video.generation_log:
+                video.generation_log = f"{video.generation_log}\n{log_entry}"
+            else:
+                video.generation_log = log_entry
+            fields_to_update.append('generation_log')
+
+        video.save(update_fields=fields_to_update)
         serializer = self.get_serializer(video)
         return Response(serializer.data)
 

@@ -43,7 +43,9 @@
                 <th>Title</th>
                 <th>Audio</th>
                 <th>Mood</th>
+                <th>Progress</th>
                 <th>Status</th>
+                <th>Error</th>
                 <th>Created</th>
                 <th>Actions</th>
             </tr>
@@ -61,6 +63,14 @@
                 <td>{{ video.title }}</td>
                 <td>{{ video.audio_track.title }}</td>
                 <td>{{ video.mood|default:'-'|capfirst }}</td>
+                <td style="min-width: 160px;">
+                    <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ video.generation_progress }}">
+                        <div class="progress-bar {% if video.generation_progress == 100 %}bg-success{% else %}bg-info{% endif %}"
+                             style="width: {{ video.generation_progress }}%">
+                            {{ video.generation_progress }}%
+                        </div>
+                    </div>
+                </td>
                 <td>
                     {% if video.status == 'failed' %}
                         <span class="badge bg-danger">{{ video.status|capfirst }}</span>
@@ -70,6 +80,13 @@
                         <span class="badge bg-success">{{ video.status|capfirst }}</span>
                     {% else %}
                         <span class="badge bg-secondary">{{ video.status|capfirst }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if video.error_message %}
+                        <span class="text-danger" title="{{ video.error_message }}">{{ video.error_code|default:'Error' }}</span>
+                    {% else %}
+                        <span class="text-muted">-</span>
                     {% endif %}
                 </td>
                 <td>{{ video.created_at }}</td>
