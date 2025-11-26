@@ -1,26 +1,38 @@
 {% extends 'videos/base.html' %}
 {% block title %}{{ project.name }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
     <div>
-        <h1 class="h4 mb-0">{{ project.name }}</h1>
+        <h1 class="h4 mb-1">{{ project.name }}</h1>
         <p class="text-muted mb-0">{{ project.description|default:'No description' }}</p>
     </div>
-    <div class="btn-group">
-        <a class="btn btn-outline-secondary btn-sm" href="{% url 'project-edit' project.pk %}">Edit</a>
-        <a class="btn btn-outline-danger btn-sm" href="{% url 'project-delete' project.pk %}">Delete</a>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'project-list' %}"><i class="bi bi-arrow-left"></i> Back to list</a>
+        <a class="btn btn-outline-secondary" href="{% url 'project-edit' project.pk %}"><i class="bi bi-pencil"></i> Edit</a>
+        {% if user.is_staff %}
+            <a class="btn btn-outline-danger" href="{% url 'project-delete' project.pk %}"><i class="bi bi-trash"></i> Delete</a>
+        {% endif %}
     </div>
 </div>
-<div class="card">
-    <div class="card-header">Videos</div>
+<div class="card card-shadow">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+        <span>Videos in this project</span>
+        <a class="btn btn-sm btn-primary" href="{% url 'video-create' %}"><i class="bi bi-plus-circle"></i> Add video</a>
+    </div>
     <ul class="list-group list-group-flush">
         {% for video in project.videos.all %}
             <li class="list-group-item d-flex justify-content-between align-items-center">
-                <span>{{ video.title }}</span>
-                <a class="btn btn-sm btn-outline-secondary" href="{% url 'video-detail' video.pk %}">View</a>
+                <div>
+                    <div class="fw-semibold">{{ video.title }}</div>
+                    <div class="text-muted small">{{ video.get_status_display }} • {{ video.created_at|date:'Y-m-d' }}</div>
+                </div>
+                <div class="btn-group btn-group-sm" role="group">
+                    <a class="btn btn-outline-secondary" href="{% url 'video-detail' video.pk %}">View</a>
+                    <a class="btn btn-primary" href="{% url 'video-detail' video.pk %}#generate">Generate</a>
+                </div>
             </li>
         {% empty %}
-            <li class="list-group-item">No videos in this project yet.</li>
+            <li class="list-group-item text-muted">No videos in this project yet.</li>
         {% endfor %}
     </ul>
 </div>

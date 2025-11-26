@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Count, Q
@@ -23,6 +24,16 @@ from .forms import (
     VideoProjectForm,
 )
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+
+
+STATUS_BADGE_CLASSES = {
+    "ready": "success",
+    "processing": "warning text-dark",
+    "pending": "secondary",
+    "failed": "danger",
+    "draft": "light text-dark",
+    "archived": "dark",
+}
 
 
 def _activity_user(request):
@@ -64,12 +75,25 @@ class DashboardView(TemplateView):
         context = super().get_context_data(**kwargs)
         try:
             videos = GeneratedVideo.objects.all()
+            status_counts = list(videos.values('status').annotate(total=Count('id')))
+            status_map = {item['status']: item['total'] for item in status_counts}
+            status_order = ["ready", "processing", "pending", "failed", "draft", "archived"]
+            context['status_summary'] = [
+                {
+                    "key": status,
+                    "label": dict(GeneratedVideo.STATUS_CHOICES).get(status, status.title()),
+                    "count": status_map.get(status, 0),
+                }
+                for status in status_order
+            ]
+            context['status_ready'] = status_map.get('ready', 0)
+            context['status_classes'] = STATUS_BADGE_CLASSES
             context['total_videos'] = videos.count()
             context['status_counts'] = _status_summary()
             context['mood_counts'] = list(videos.values('mood').annotate(total=Count('id')))
             context['total_audio'] = AudioTrack.objects.count()
             context['total_projects'] = VideoProject.objects.count()
-            context['recent_videos'] = list(videos.order_by('-created_at')[:5])
+            context['recent_videos'] = list(videos.select_related('audio_track').order_by('-created_at')[:5])
         except OperationalError as exc:
             messages.error(
                 self.request,
@@ -78,11 +102,12 @@ class DashboardView(TemplateView):
             )
             context.update(
                 total_videos=0,
-                status_counts=[],
+                status_summary=[],
                 mood_counts=[],
                 total_audio=0,
                 total_projects=0,
                 recent_videos=[],
+                status_ready=0,
             )
         return context
 
@@ -160,6 +185,113 @@ class GeneratedVideoDetailView(FormMixin, DetailView):
             return redirect(self.get_success_url())
         context = self.get_context_data(form=form)
         return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        tags = []
+        if self.object.tags:
+            tags = [tag.strip() for tag in self.object.tags.split(',') if tag.strip()]
+        context['tags'] = tags
+        context['status_classes'] = STATUS_BADGE_CLASSES
+        return context
+
+
+@require_POST
+def video_generate(request, pk):
+    video = get_object_or_404(GeneratedVideo, pk=pk)
+    redirect_url = redirect('video-detail', pk=pk)
+
+    video.status = 'processing'
+    video.error_message = ''
+    video.generation_progress = 0
+    video.save(update_fields=['status', 'error_message', 'generation_progress', 'updated_at'])
+
+    try:
+        audio_file = video.audio_track.audio_file
+        if not audio_file:
+            raise ValueError('Audio file is missing for this track.')
+        if not hasattr(audio_file, 'path') or not os.path.exists(audio_file.path):
+            raise ValueError('Audio file path is invalid or the file does not exist.')
+
+        from moviepy.editor import AudioFileClip, ColorClip, CompositeVideoClip, ImageClip
+        from PIL import Image, ImageDraw, ImageFont
+        import numpy as np
+
+        audio_path = Path(audio_file.path)
+        output_dir = Path(settings.MEDIA_ROOT) / 'videos'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_name = f'generated_{video.pk}.mp4'
+        output_path = output_dir / output_name
+
+        with AudioFileClip(str(audio_path)) as audio_clip:
+            duration = audio_clip.duration or 0
+            duration_seconds = int(duration)
+
+            background = ColorClip(size=(1280, 720), color=(0, 0, 0), duration=duration)
+
+            text_lines = [video.title or video.audio_track.title]
+            first_line = ''
+            if video.audio_track.lyrics:
+                first_line = video.audio_track.lyrics.strip().splitlines()[0]
+            if first_line:
+                text_lines.append(first_line)
+            text_content = "\n".join(filter(None, text_lines)) or "Generated Video"
+
+            img = Image.new('RGBA', (1280, 720), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(img)
+            font = ImageFont.load_default()
+            bbox = draw.multiline_textbbox((0, 0), text_content, font=font, align='center')
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            position = ((img.width - text_width) // 2, (img.height - text_height) // 2)
+            draw.multiline_text(position, text_content, font=font, fill=(255, 255, 255, 230), align='center')
+
+            text_clip = ImageClip(np.array(img)).set_duration(duration)
+
+            composite = CompositeVideoClip([background, text_clip]).set_audio(audio_clip)
+            composite.write_videofile(
+                str(output_path),
+                fps=24,
+                codec='libx264',
+                audio_codec='aac',
+                verbose=False,
+                logger=None,
+            )
+
+            composite.close()
+            background.close()
+            text_clip.close()
+
+        video.video_file.name = f'videos/{output_name}'
+        video.duration_seconds = duration_seconds
+        video.file_size_bytes = os.path.getsize(output_path) if output_path.exists() else None
+        video.generation_progress = 100
+        video.status = 'ready'
+        video.save(update_fields=[
+            'video_file',
+            'duration_seconds',
+            'file_size_bytes',
+            'generation_progress',
+            'status',
+            'updated_at',
+        ])
+
+        ActivityLog.objects.create(
+            user=_activity_user(request),
+            action='generate_video',
+            object_type='GeneratedVideo',
+            object_id=video.id,
+            description=f"Generated video {video.title}",
+        )
+        messages.success(request, 'Video generated successfully.')
+    except Exception as exc:
+        video.status = 'failed'
+        video.error_message = str(exc)
+        video.generation_progress = 0
+        video.save(update_fields=['status', 'error_message', 'generation_progress', 'updated_at'])
+        messages.error(request, f'Failed to generate video: {exc}')
+
+    return redirect_url
 
 
 class GeneratedVideoCreateView(CreateView):
@@ -244,6 +376,32 @@ class GeneratedVideoDeleteView(StaffRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
+@require_POST
+def generate_video(request, pk):
+    video = get_object_or_404(GeneratedVideo, pk=pk)
+
+    if video.status == "processing":
+        messages.info(request, "Video generation already in progress.")
+        return redirect('video-detail', pk=video.pk)
+
+    try:
+        generator = getattr(video, "generate_ai_video", None)
+        if callable(generator):
+            generator()
+        ActivityLog.objects.create(
+            user=_activity_user(request),
+            action='generate_video',
+            object_type='GeneratedVideo',
+            object_id=video.id,
+            description=f"Triggered generation for {video.title}",
+        )
+        messages.success(request, "Video generated successfully.")
+    except Exception as exc:  # pragma: no cover - surface errors to user
+        messages.error(request, f"Video generation failed: {exc}")
+
+    return redirect('video-detail', pk=video.pk)
+
+
 class AudioTrackListView(ListView):
     model = AudioTrack
     template_name = 'videos/audio_list.html'
@@ -255,6 +413,12 @@ class AudioTrackDetailView(DetailView):
     model = AudioTrack
     template_name = 'videos/audio_detail.html'
     context_object_name = 'audio'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['related_videos'] = self.object.videos.select_related('audio_track').order_by('-created_at')
+        context['status_classes'] = STATUS_BADGE_CLASSES
+        return context
 
 
 class AudioTrackCreateView(CreateView):
