@@ -1,0 +1,71 @@
+{% extends 'videos/base.html' %}
+{% block title %}Video Detail{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3">
+    <h1>{{ video.title }}</h1>
+    <div>
+        <a class="btn btn-secondary" href="{% url 'video-list' %}">Back to list</a>
+        <a class="btn btn-primary" href="{% url 'video-edit' video.pk %}">Edit</a>
+        {% if user.is_staff %}
+            <a class="btn btn-danger" href="{% url 'video-delete' video.pk %}">Delete</a>
+        {% endif %}
+    </div>
+</div>
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="ratio ratio-16x9">
+            <video controls src="{{ video.video_file.url }}" class="w-100 h-100"></video>
+        </div>
+    </div>
+    <div class="col-md-4">
+        {% if video.thumbnail %}
+            <img src="{{ video.thumbnail.url }}" class="img-fluid mb-3" alt="thumbnail">
+        {% endif %}
+        <p><strong>Status:</strong> <span class="badge bg-info text-dark">{{ video.status|capfirst }}</span></p>
+        <p><strong>Mood:</strong> {{ video.mood|default:'-'|capfirst }}</p>
+        <p><strong>Created:</strong> {{ video.created_at }}</p>
+        <p><strong>Updated:</strong> {{ video.updated_at }}</p>
+        <p><strong>Duration:</strong> {{ video.duration_seconds|default:'-' }} seconds</p>
+        <p><strong>File Size:</strong> {{ video.file_size_bytes|default:'-' }} bytes</p>
+        <p><strong>Resolution:</strong> {{ video.resolution|default:'-' }}</p>
+        <p><strong>Aspect Ratio:</strong> {{ video.aspect_ratio|default:'-' }}</p>
+        {% if video.error_message %}
+            <div class="alert alert-danger">Error: {{ video.error_message }}</div>
+        {% endif %}
+    </div>
+</div>
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h4>Description</h4>
+        <p>{{ video.description|default:'No description.' }}</p>
+        <h4>Tags</h4>
+        <p>{{ video.tags|default:'-' }}</p>
+        <h4>Prompt</h4>
+        <p>{{ video.prompt_used|default:'-' }}</p>
+    </div>
+    <div class="col-md-6">
+        <h4>AI Metadata</h4>
+        <p><strong>Model:</strong> {{ video.model_name|default:'-' }}</p>
+        <p><strong>Generation Time (ms):</strong> {{ video.generation_time_ms|default:'-' }}</p>
+        <p><strong>Seed:</strong> {{ video.seed|default:'-' }}</p>
+        <h4>Audio Track</h4>
+        <p><a href="{% url 'audio-detail' video.audio_track.pk %}">{{ video.audio_track.title }}</a> by {{ video.audio_track.artist|default:'Unknown' }}</p>
+        <p><strong>Language:</strong> {{ video.audio_track.language|default:'-' }}</p>
+        <p><strong>Lyrics:</strong> {{ video.audio_track.lyrics|truncatechars:150 }}</p>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header">Projects</div>
+    <div class="card-body">
+        {% if video.projects.all %}
+            <ul class="list-group">
+                {% for project in video.projects.all %}
+                    <li class="list-group-item"><a href="{% url 'project-detail' project.pk %}">{{ project.name }}</a></li>
+                {% empty %}
+                    <li class="list-group-item">No projects.</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

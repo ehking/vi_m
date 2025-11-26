@@ -1,0 +1,39 @@
+{% extends 'videos/base.html' %}
+{% block title %}Audio Tracks{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Audio Tracks</h1>
+    <a class="btn btn-primary" href="{% url 'audio-create' %}">Add Audio</a>
+</div>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Artist</th>
+            <th>Language</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for audio in audio_tracks %}
+        <tr>
+            <td><a href="{% url 'audio-detail' audio.pk %}">{{ audio.title }}</a></td>
+            <td>{{ audio.artist|default:'-' }}</td>
+            <td>{{ audio.language|default:'-' }}</td>
+            <td>{{ audio.created_at }}</td>
+            <td>
+                <div class="btn-group btn-group-sm">
+                    <a class="btn btn-outline-secondary" href="{% url 'audio-edit' audio.pk %}">Edit</a>
+                    {% if user.is_staff %}
+                        <a class="btn btn-outline-danger" href="{% url 'audio-delete' audio.pk %}">Delete</a>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">No audio tracks found.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

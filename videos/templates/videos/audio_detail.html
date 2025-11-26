@@ -1,0 +1,31 @@
+{% extends 'videos/base.html' %}
+{% block title %}Audio Detail{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3">
+    <h1>{{ audio.title }}</h1>
+    <div>
+        <a class="btn btn-secondary" href="{% url 'audio-list' %}">Back to list</a>
+        <a class="btn btn-primary" href="{% url 'audio-edit' audio.pk %}">Edit</a>
+        {% if user.is_staff %}
+            <a class="btn btn-danger" href="{% url 'audio-delete' audio.pk %}">Delete</a>
+        {% endif %}
+    </div>
+</div>
+<p><strong>Artist:</strong> {{ audio.artist|default:'-' }}</p>
+<p><strong>Language:</strong> {{ audio.language|default:'-' }}</p>
+<p><strong>BPM:</strong> {{ audio.bpm|default:'-' }}</p>
+<p><strong>Lyrics:</strong></p>
+<pre class="bg-light p-3">{{ audio.lyrics|default:'No lyrics provided.' }}</pre>
+<p><strong>Uploaded:</strong> {{ audio.created_at }}</p>
+<h3 class="mt-4">Videos</h3>
+<ul class="list-group mb-4">
+    {% for video in audio.videos.all %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <a href="{% url 'video-detail' video.pk %}">{{ video.title }}</a>
+            <span class="badge bg-info text-dark">{{ video.status|capfirst }}</span>
+        </li>
+    {% empty %}
+        <li class="list-group-item">No videos linked yet.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
