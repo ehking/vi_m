@@ -1,0 +1,27 @@
+{% extends 'videos/base.html' %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h4 mb-0">{{ project.name }}</h1>
+        <p class="text-muted mb-0">{{ project.description|default:'No description' }}</p>
+    </div>
+    <div class="btn-group">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'project-edit' project.pk %}">Edit</a>
+        <a class="btn btn-outline-danger btn-sm" href="{% url 'project-delete' project.pk %}">Delete</a>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header">Videos</div>
+    <ul class="list-group list-group-flush">
+        {% for video in project.videos.all %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span>{{ video.title }}</span>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'video-detail' video.pk %}">View</a>
+            </li>
+        {% empty %}
+            <li class="list-group-item">No videos in this project yet.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}

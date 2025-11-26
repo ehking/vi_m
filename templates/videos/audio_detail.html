@@ -1,0 +1,24 @@
+{% extends 'videos/base.html' %}
+{% block title %}{{ audio.title }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h4 mb-0">{{ audio.title }}</h1>
+        <p class="text-muted mb-0">{{ audio.artist|default:'Unknown artist' }}</p>
+    </div>
+    <div class="btn-group">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'audio-edit' audio.pk %}">Edit</a>
+        <a class="btn btn-outline-danger btn-sm" href="{% url 'audio-delete' audio.pk %}">Delete</a>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header">Details</div>
+    <table class="table mb-0">
+        <tr><th>Language</th><td>{{ audio.language|default:'-' }}</td></tr>
+        <tr><th>BPM</th><td>{{ audio.bpm|default:'-' }}</td></tr>
+        <tr><th>Lyrics</th><td>{{ audio.lyrics|linebreaks|default:'No lyrics provided.' }}</td></tr>
+        <tr><th>Audio File</th><td>{% if audio.audio_file %}<a href="{{ audio.audio_file.url }}">Download</a>{% else %}-{% endif %}</td></tr>
+        <tr><th>Created</th><td>{{ audio.created_at|date:'Y-m-d H:i' }}</td></tr>
+    </table>
+</div>
+{% endblock %}

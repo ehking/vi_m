@@ -1,0 +1,81 @@
+{% extends 'videos/base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-bg-primary">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase">Total Videos</h6>
+                <p class="display-6 mb-0">{{ total_videos }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-success">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase">Audio Tracks</h6>
+                <p class="display-6 mb-0">{{ total_audio }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-bg-warning">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase">Projects</h6>
+                <p class="display-6 mb-0">{{ total_projects }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Videos by Status</div>
+            <ul class="list-group list-group-flush">
+                {% for status in status_counts %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ status.status|title }}
+                        <span class="badge bg-primary rounded-pill">{{ status.total }}</span>
+                    </li>
+                {% empty %}
+                    <li class="list-group-item">No video data yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Videos by Mood</div>
+            <ul class="list-group list-group-flush">
+                {% for mood in mood_counts %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ mood.mood|title|default:'Unset' }}
+                        <span class="badge bg-secondary rounded-pill">{{ mood.total }}</span>
+                    </li>
+                {% empty %}
+                    <li class="list-group-item">No mood data yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+<div class="card mt-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Recent Videos</span>
+        <a class="btn btn-sm btn-primary" href="{% url 'video-create' %}">Create Video</a>
+    </div>
+    <ul class="list-group list-group-flush">
+        {% for video in recent_videos %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="fw-bold">{{ video.title }}</div>
+                    <small class="text-muted">{{ video.get_status_display }} | {{ video.mood|title }}</small>
+                </div>
+                <a class="btn btn-outline-secondary btn-sm" href="{% url 'video-detail' video.pk %}">View</a>
+            </li>
+        {% empty %}
+            <li class="list-group-item">No videos created yet.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endblock %}
