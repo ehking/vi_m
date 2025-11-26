@@ -1,0 +1,30 @@
+name: Codex Auto Approve & Merge
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+jobs:
+  auto-approve-and-merge:
+    runs-on: ubuntu-latest
+
+    # 👇 فقط PRهایی که توسط Codex باز میشه انجام بده
+    # بعدا فقط اسم actor ریپو رو عوض می‌کنی
+    if: github.actor == 'chatgpt-codex-connector'
+
+    permissions:
+      pull-requests: write
+      contents: write
+
+    steps:
+      - name: Auto approve PR
+        uses: hmarr/auto-approve-action@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto merge PR
+        uses: pascalgn/automerge-action@v0.16.4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_METHOD: squash
+          MERGE_DELETE_BRANCH: 'true'
