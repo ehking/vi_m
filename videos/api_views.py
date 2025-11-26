@@ -7,6 +7,15 @@ from .models import AudioTrack, GeneratedVideo, VideoProject
 from .api_serializers import AudioTrackSerializer, GeneratedVideoSerializer, VideoProjectSerializer
 
 
+DEFAULT_PROGRESS_BY_STATUS = {
+    "draft": 0,
+    "pending": 25,
+    "processing": 75,
+    "ready": 100,
+    "archived": 100,
+}
+
+
 class GeneratedVideoViewSet(viewsets.ModelViewSet):
     queryset = GeneratedVideo.objects.all().select_related('audio_track')
     serializer_class = GeneratedVideoSerializer
@@ -38,6 +47,12 @@ class GeneratedVideoViewSet(viewsets.ModelViewSet):
         if status_value:
             video.status = status_value
             fields_to_update.append('status')
+
+            if progress_value is None:
+                default_progress = DEFAULT_PROGRESS_BY_STATUS.get(status_value)
+                if default_progress is not None:
+                    video.generation_progress = default_progress
+                    fields_to_update.append('generation_progress')
 
         video.error_message = error_message
         fields_to_update.append('error_message')
