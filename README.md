@@ -16,6 +16,10 @@ A local-first Django application for managing audio tracks and AI-generated musi
 python manage.py migrate
 ```
 
+Run migrations again whenever you pull new changes so newly added columns (for example, generation
+progress and logging fields) are created in your local database and the dashboard can load without
+errors.
+
 ## Create superuser
 
 ```bash
