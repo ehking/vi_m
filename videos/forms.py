@@ -58,6 +58,22 @@ class GeneratedVideoForm(StyledModelForm):
             'is_active',
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        status_field = self.fields.get('status')
+        if status_field:
+            status_field.required = False
+            status_field.initial = (
+                status_field.initial
+                or self._meta.model._meta.get_field('status').default
+            )
+
+    def clean_status(self):
+        status = self.cleaned_data.get('status')
+        if not status:
+            return self._meta.model._meta.get_field('status').default
+        return status
+
 
 class VideoProjectForm(StyledModelForm):
     class Meta:
