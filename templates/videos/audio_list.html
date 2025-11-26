@@ -1,34 +1,50 @@
 {% extends 'videos/base.html' %}
 {% block title %}Audio Tracks{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h4 mb-0">Audio Tracks</h1>
-    <a class="btn btn-primary" href="{% url 'audio-create' %}">Add Audio</a>
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h1 class="h4 mb-1">Audio Tracks</h1>
+        <p class="text-muted mb-0">Source audio used for AI video generation.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+        <a class="btn btn-primary" href="{% url 'audio-create' %}"><i class="bi bi-plus-circle"></i> Add Audio</a>
+    </div>
 </div>
-<div class="table-responsive">
-    <table class="table table-striped align-middle">
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Artist</th>
-                <th>Language</th>
-                <th>BPM</th>
-                <th>Created</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for audio in audio_tracks %}
+<div class="card card-shadow">
+    <div class="table-responsive">
+        <table class="table table-hover table-striped align-middle mb-0">
+            <thead class="table-light">
                 <tr>
-                    <td><a href="{% url 'audio-detail' audio.pk %}">{{ audio.title }}</a></td>
-                    <td>{{ audio.artist|default:'-' }}</td>
-                    <td>{{ audio.language|default:'-' }}</td>
-                    <td>{{ audio.bpm|default:'-' }}</td>
-                    <td>{{ audio.created_at|date:'Y-m-d H:i' }}</td>
+                    <th>Title</th>
+                    <th>Artist</th>
+                    <th>Language</th>
+                    <th>BPM</th>
+                    <th>Created</th>
+                    <th class="text-end">Actions</th>
                 </tr>
-            {% empty %}
-                <tr><td colspan="5" class="text-center">No audio tracks found.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for audio in audio_tracks %}
+                    <tr>
+                        <td class="fw-semibold"><a class="text-decoration-none" href="{% url 'audio-detail' audio.pk %}">{{ audio.title }}</a></td>
+                        <td>{{ audio.artist|default:'-' }}</td>
+                        <td>{{ audio.language|default:'-' }}</td>
+                        <td>{{ audio.bpm|default:'-' }}</td>
+                        <td>{{ audio.created_at|date:'Y-m-d H:i' }}</td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a class="btn btn-outline-secondary" href="{% url 'audio-detail' audio.pk %}">View</a>
+                                <a class="btn btn-outline-secondary" href="{% url 'audio-edit' audio.pk %}">Edit</a>
+                                <a class="btn btn-outline-danger" href="{% url 'audio-delete' audio.pk %}">Delete</a>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">No audio tracks found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}
