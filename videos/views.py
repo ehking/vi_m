@@ -81,8 +81,11 @@ class GeneratedVideoListView(ListView):
             queryset = queryset.filter(mood=mood)
         if search:
             queryset = queryset.filter(Q(title__icontains=search) | Q(tags__icontains=search))
+        queryset = queryset.order_by('-created_at')
         try:
-            return queryset.order_by('-created_at')
+            # Trigger a lightweight query so schema issues (e.g., missing columns) surface here
+            # and can be handled gracefully instead of exploding during template rendering.
+            queryset.exists()
         except OperationalError as exc:
             messages.error(
                 self.request,
@@ -90,6 +93,8 @@ class GeneratedVideoListView(ListView):
                 f" columns (error: {exc}).",
             )
             return GeneratedVideo.objects.none()
+        return queryset
+
 
 
 class GeneratedVideoDetailView(DetailView):
