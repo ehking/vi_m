@@ -1,7 +1,18 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from django.contrib import admin
+
+from django.contrib import admin
+from django.utils.html import format_html
+
+from .models import (
+    ActivityLog,
+    AudioTrack,
+    GeneratedVideo,
+    VideoGenerationLog,
+    VideoProject,
+)
 
 
 class GeneratedVideoInline(admin.TabularInline):
@@ -61,6 +72,20 @@ class ActivityLogAdmin(admin.ModelAdmin):
     list_filter = ("action", "object_type", "created_at")
     search_fields = ("description",)
     readonly_fields = ("action", "object_type", "object_id", "user", "description", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(VideoGenerationLog)
+class VideoGenerationLogAdmin(admin.ModelAdmin):
+    list_display = ("video", "stage", "status", "message", "created_at")
+    list_filter = ("status", "stage", "created_at")
+    search_fields = ("message", "detail", "video__title")
+    readonly_fields = ("video", "stage", "status", "message", "detail", "created_at")
 
     def has_add_permission(self, request):
         return False

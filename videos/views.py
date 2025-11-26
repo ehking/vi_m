@@ -15,25 +15,12 @@ from django.views.generic import (
     TemplateView,
     UpdateView,
 )
-from django.views.generic.edit import FormMixin
+from django.views import View
 
 from django.core.files.base import ContentFile
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
-from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
+from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoGenerationLog, VideoProject
 from .services.video_generation import generate_video_for_instance
-
-
-logger = logging.getLogger(__name__)
-
-
-STATUS_BADGE_CLASSES = {
-    "ready": "success",
-    "processing": "warning text-dark",
-    "pending": "secondary",
-    "failed": "danger",
-    "draft": "light text-dark",
-    "archived": "dark",
-}
 
 
 def _activity_user(request):
@@ -349,6 +336,14 @@ def generate_ai_video(request, pk):
 
     return redirect('video-detail', pk=video.pk)
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["generation_logs"] = list(
+            self.object.generation_logs.all().order_by("-created_at")[:100]
+        )
+        context["has_debug_access"] = self.request.user.is_staff
+        return context
+
 
 class GeneratedVideoCreateView(CreateView):
     model = GeneratedVideo
@@ -602,21 +597,24 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
-class GenerateAIVideoView(View):
-    def post(self, request, *args, **kwargs):
-        audio = get_object_or_404(AudioTrack, pk=kwargs['pk'])
-        title = f"{audio.title} AI Video"
-        video = GeneratedVideo.objects.create(
-            audio_track=audio,
-            title=title,
-            status='pending',
-        )
-        ActivityLog.objects.create(
-            user=_activity_user(request),
-            action='generate_video',
-            object_type='GeneratedVideo',
-            object_id=video.id,
-            description=f"Queued AI video generation for audio {audio.title}",
-        )
-        messages.success(request, 'AI video generation requested. You will see updates here as it progresses.')
-        return redirect('video-detail', pk=video.pk)
+class TriggerVideoGenerationView(StaffRequiredMixin, View):
+    def post(self, request, pk):
+        video = get_object_or_404(GeneratedVideo, pk=pk)
+        try:
+            generate_video_for_instance(video)
+            messages.success(request, "Video generation completed successfully.")
+        except Exception as exc:  # noqa: BLE001
+            messages.error(request, f"Video generation failed: {exc}")
+        return redirect('video-detail', pk=pk)
+
+
+class VideoGenerationDebugListView(StaffRequiredMixin, TemplateView):
+    template_name = 'videos/debug_list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["recent_failures"] = VideoGenerationLog.objects.select_related("video").filter(
+            status="failed"
+        )[:50]
+        context["recent_activity"] = VideoGenerationLog.objects.select_related("video").all()[:100]
+        return context

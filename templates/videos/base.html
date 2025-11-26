@@ -30,7 +30,9 @@
                 <li class="nav-item"><a class="nav-link" href="{% url 'video-list' %}">Videos</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'audio-list' %}">Audio</a></li>
                 <li class="nav-item"><a class="nav-link" href="{% url 'project-list' %}">Projects</a></li>
-                <li class="nav-item"><a class="nav-link" href="/admin/" target="_blank" rel="noopener">Admin</a></li>
+                {% if user.is_staff %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'debug-list' %}">Debug</a></li>
+                {% endif %}
             </ul>
             <div class="d-flex align-items-center gap-3">
                 {% if user.is_authenticated %}
