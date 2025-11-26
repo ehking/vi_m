@@ -2,6 +2,7 @@ import os
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count, Q
+from django.db.utils import OperationalError
 from django.shortcuts import redirect
 from django.urls import reverse_lazy
 from django.views.generic import (
@@ -31,13 +32,28 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        videos = GeneratedVideo.objects.all()
-        context['total_videos'] = videos.count()
-        context['status_counts'] = videos.values('status').annotate(total=Count('id'))
-        context['mood_counts'] = videos.values('mood').annotate(total=Count('id'))
-        context['total_audio'] = AudioTrack.objects.count()
-        context['total_projects'] = VideoProject.objects.count()
-        context['recent_videos'] = videos.order_by('-created_at')[:5]
+        try:
+            videos = GeneratedVideo.objects.all()
+            context['total_videos'] = videos.count()
+            context['status_counts'] = videos.values('status').annotate(total=Count('id'))
+            context['mood_counts'] = videos.values('mood').annotate(total=Count('id'))
+            context['total_audio'] = AudioTrack.objects.count()
+            context['total_projects'] = VideoProject.objects.count()
+            context['recent_videos'] = videos.order_by('-created_at')[:5]
+        except OperationalError as exc:
+            messages.error(
+                self.request,
+                "Database schema is out of date. Please run 'python manage.py migrate' to create new"
+                f" columns (error: {exc}).",
+            )
+            context.update(
+                total_videos=0,
+                status_counts=[],
+                mood_counts=[],
+                total_audio=0,
+                total_projects=0,
+                recent_videos=[],
+            )
         return context
 
 

@@ -21,10 +21,25 @@ class AudioTrackAdmin(admin.ModelAdmin):
 
 @admin.register(GeneratedVideo)
 class GeneratedVideoAdmin(admin.ModelAdmin):
-    list_display = ("thumbnail_preview", "title", "audio_track", "status", "mood", "created_at", "is_active")
+    list_display = (
+        "thumbnail_preview",
+        "title",
+        "audio_track",
+        "status",
+        "generation_progress",
+        "mood",
+        "created_at",
+        "is_active",
+    )
     list_filter = ("status", "mood", "is_active", "created_at")
-    search_fields = ("title", "audio_track__title", "tags", "model_name")
-    readonly_fields = ("created_at", "updated_at", "file_size_bytes", "duration_seconds", "thumbnail_preview")
+    search_fields = ("title", "audio_track__title", "tags", "model_name", "error_code")
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "file_size_bytes",
+        "duration_seconds",
+        "thumbnail_preview",
+    )
 
     def thumbnail_preview(self, obj):
         if obj.thumbnail:
