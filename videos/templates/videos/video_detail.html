@@ -3,7 +3,7 @@
 {% block content %}
 <div class="d-flex justify-content-between mb-3">
     <h1>{{ video.title }}</h1>
-    <div>
+    <div class="d-flex gap-2">
         <a class="btn btn-secondary" href="{% url 'video-list' %}">Back to list</a>
         <form class="d-inline" method="post" action="{% url 'video-generate' video.pk %}">
             {% csrf_token %}
@@ -13,19 +13,51 @@
         {% if user.is_staff %}
             <a class="btn btn-danger" href="{% url 'video-delete' video.pk %}">Delete</a>
         {% endif %}
+        {% if video.status != 'processing' %}
+            <form method="post" action="{% url 'video-generate' video.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success">Generate AI Video</button>
+            </form>
+        {% else %}
+            <button class="btn btn-outline-secondary" disabled>Processing…</button>
+        {% endif %}
     </div>
 </div>
 <div class="row mb-4">
     <div class="col-md-8">
-        <div class="ratio ratio-16x9">
-            <video controls src="{{ video.video_file.url }}" class="w-100 h-100"></video>
-        </div>
+        {% if video.video_file %}
+            <div class="ratio ratio-16x9">
+                <video controls src="{{ video.video_file.url }}" class="w-100 h-100"></video>
+            </div>
+        {% else %}
+            <div class="border rounded d-flex align-items-center justify-content-center bg-light ratio ratio-16x9">
+                <div class="text-center">
+                    <p class="mb-2">No video generated yet.</p>
+                    {% if video.status != 'processing' %}
+                        <form method="post" action="{% url 'video-generate' video.pk %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success">Generate AI Video</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
     </div>
     <div class="col-md-4">
         {% if video.thumbnail %}
             <img src="{{ video.thumbnail.url }}" class="img-fluid mb-3" alt="thumbnail">
         {% endif %}
-        <p><strong>Status:</strong> <span class="badge bg-info text-dark">{{ video.status|capfirst }}</span></p>
+        <p><strong>Status:</strong>
+            {% if video.status == 'failed' %}
+                <span class="badge bg-danger">{{ video.status|capfirst }}</span>
+            {% elif video.status == 'processing' %}
+                <span class="badge bg-warning text-dark">{{ video.status|capfirst }}</span>
+            {% elif video.status == 'ready' %}
+                <span class="badge bg-success">{{ video.status|capfirst }}</span>
+            {% else %}
+                <span class="badge bg-secondary">{{ video.status|capfirst }}</span>
+            {% endif %}
+        </p>
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center">
                 <strong>Progress</strong>
@@ -43,7 +75,7 @@
         <p><strong>Resolution:</strong> {{ video.resolution|default:'-' }}</p>
         <p><strong>Aspect Ratio:</strong> {{ video.aspect_ratio|default:'-' }}</p>
         <p><strong>Error Code:</strong> {{ video.error_code|default:'-' }}</p>
-        {% if video.error_message %}
+        {% if video.status == 'failed' and video.error_message %}
             <div class="alert alert-danger">Error: {{ video.error_message }}</div>
         {% endif %}
     </div>
