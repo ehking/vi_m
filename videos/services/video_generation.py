@@ -33,9 +33,15 @@ def _append_log(video, entries: List[str]) -> None:
 def _load_moviepy():
     """Lazy import MoviePy so tests can mock the module easily."""
 
-    from moviepy import editor
+    # moviepy >=2.0 does not expose ``editor`` at the top level, so we
+    # import the submodule directly to ensure compatibility across
+    # versions.
+    try:
+        import moviepy.editor as moviepy_editor  # type: ignore
+    except ImportError:
+        from moviepy import editor as moviepy_editor  # type: ignore
 
-    return editor
+    return moviepy_editor
 
 
 def generate_video_for_instance(video):
