@@ -82,6 +82,38 @@ class GeneratedVideoForm(StyledModelForm):
         return status
 
 
+class GeneratedVideoStatusForm(StyledModelForm):
+    class Meta:
+        model = GeneratedVideo
+        fields = [
+            'status',
+            'tags',
+            'mood',
+            'prompt_used',
+            'model_name',
+            'generation_progress',
+            'error_message',
+            'video_file',
+        ]
+        widgets = {
+            'generation_progress': forms.NumberInput(attrs={'min': 0, 'max': 100}),
+            'prompt_used': forms.Textarea(attrs={'rows': 3}),
+            'error_message': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def clean_generation_progress(self):
+        progress = self.cleaned_data.get('generation_progress')
+        if progress is None or progress == '':
+            return None
+        try:
+            progress_int = int(progress)
+        except (TypeError, ValueError):
+            raise forms.ValidationError('Generation progress must be an integer between 0 and 100.')
+        if progress_int < 0 or progress_int > 100:
+            raise forms.ValidationError('Generation progress must be between 0 and 100.')
+        return progress_int
+
+
 class VideoProjectForm(StyledModelForm):
     class Meta:
         model = VideoProject

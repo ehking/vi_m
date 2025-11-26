@@ -34,6 +34,12 @@ class GeneratedVideoViewSet(viewsets.ModelViewSet):
             qs = qs.filter(audio_track_id=audio_track)
         return qs
 
+    @action(detail=False, methods=['get'], url_path='pending')
+    def list_pending(self, request):
+        queryset = self.get_queryset().filter(status='pending')
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['patch'], url_path='status')
     def update_status(self, request, pk=None):
         video = self.get_object()
@@ -42,6 +48,9 @@ class GeneratedVideoViewSet(viewsets.ModelViewSet):
         error_code = request.data.get('error_code', '')
         generation_log = request.data.get('generation_log')
         progress_value = request.data.get('generation_progress')
+        if progress_value == '':
+            progress_value = None
+        video_file_path = request.data.get('video_file')
         fields_to_update = []
 
         if status_value:
@@ -78,6 +87,10 @@ class GeneratedVideoViewSet(viewsets.ModelViewSet):
             else:
                 video.generation_log = log_entry
             fields_to_update.append('generation_log')
+
+        if video_file_path is not None:
+            video.video_file.name = str(video_file_path)
+            fields_to_update.append('video_file')
 
         video.save(update_fields=fields_to_update)
         serializer = self.get_serializer(video)

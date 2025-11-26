@@ -1,8 +1,17 @@
+import os
+import tempfile
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
 from videos.models import AudioTrack, GeneratedVideo
 
+@override_settings(MEDIA_ROOT=tempfile.gettempdir())
+class AudioAndVideoModelTests(TestCase):
+    def setUp(self):
+        self.audio_file = SimpleUploadedFile(
+            "track.mp3", b"audio-bytes", content_type="audio/mpeg"
+        )
 
 class AudioTrackModelTest(TestCase):
     def test_create_audio_track_with_minimal_fields(self):

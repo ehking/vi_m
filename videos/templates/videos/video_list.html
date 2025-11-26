@@ -45,6 +45,7 @@
                 <th>Mood</th>
                 <th>Progress</th>
                 <th>Status</th>
+                <th>File</th>
                 <th>Error</th>
                 <th>Created</th>
                 <th>Actions</th>
@@ -80,6 +81,13 @@
                         <span class="badge bg-success">{{ video.status|capfirst }}</span>
                     {% else %}
                         <span class="badge bg-secondary">{{ video.status|capfirst }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if video.video_file %}
+                        <span class="badge bg-success">Present</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Missing</span>
                     {% endif %}
                 </td>
                 <td>
