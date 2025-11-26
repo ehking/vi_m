@@ -8,6 +8,7 @@ from django.db.models import Count, Q
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
+from django.views import View
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -21,7 +22,9 @@ from django.views import View
 from django.core.files.base import ContentFile
 from .forms import AudioTrackForm, GeneratedVideoForm, VideoProjectForm
 from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoProject
-from .services.video_generation import generate_video_for_instance, VideoGenerationError
+from .services import generate_video_for_instance
+
+logger = logging.getLogger(__name__)
 
 
 def _activity_user(request):
@@ -347,6 +350,23 @@ def generate_ai_video(request, pk):
         return context
 
 
+class GenerateAIVideoView(View):
+    def post(self, request, pk):
+        video = get_object_or_404(GeneratedVideo, pk=pk)
+        try:
+            generate_video_for_instance(video)
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to generate video %s", video.pk)
+            messages.error(request, "Failed to generate the video. Please try again.")
+            return redirect('video-detail', pk=video.pk)
+
+        if video.status == "ready":
+            messages.success(request, "Video generated successfully.")
+        else:
+            messages.error(request, video.error_message or "Video generation failed.")
+        return redirect('video-detail', pk=video.pk)
+
+
 class GeneratedVideoCreateView(CreateView):
     model = GeneratedVideo
     form_class = GeneratedVideoForm
@@ -469,8 +489,7 @@ class AudioTrackDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['related_videos'] = self.object.videos.select_related('audio_track').order_by('-created_at')
-        context['status_classes'] = STATUS_BADGE_CLASSES
+        context["related_videos"] = self.object.videos.order_by("-created_at")
         return context
 
 

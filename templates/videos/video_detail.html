@@ -4,17 +4,16 @@
 <div class="d-flex justify-content-between mb-3 align-items-center">
     <h1 class="mb-0">{{ video.title }}</h1>
     <div>
-        <a class="btn btn-secondary" href="{% url 'video-list' %}">Back to list</a>
-        {% if user.is_staff %}
-            <form method="post" action="{% url 'video-generate' video.pk %}" class="d-inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-warning">Generate AI Video</button>
-            </form>
-        {% endif %}
-        <a class="btn btn-primary" href="{% url 'video-edit' video.pk %}">Edit</a>
-        {% if user.is_staff %}
-            <a class="btn btn-danger" href="{% url 'video-delete' video.pk %}">Delete</a>
-        {% endif %}
+        <h1 class="h4 mb-0">{{ video.title }}</h1>
+        <p class="text-muted mb-0">{{ video.audio_track }}</p>
+    </div>
+    <div class="btn-group">
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'video-edit' video.pk %}">Edit</a>
+        <a class="btn btn-outline-danger btn-sm" href="{% url 'video-delete' video.pk %}">Delete</a>
+        <form method="post" action="{% url 'video-generate' video.pk %}">
+            {% csrf_token %}
+            <button class="btn btn-primary btn-sm" type="submit">Generate AI Video</button>
+        </form>
     </div>
 </div>
 
@@ -81,8 +80,20 @@
                 <p><strong>Lyrics:</strong> {{ video.audio_track.lyrics|truncatechars:150 }}</p>
             </div>
         </div>
-        <div class="card mb-4">
+        <div class="card mt-3">
             <div class="card-header">Generation Log</div>
+            <div class="card-body">
+                {% if video.generation_log %}
+                    <pre class="mb-0" style="white-space: pre-wrap;">{{ video.generation_log }}</pre>
+                {% else %}
+                    <p class="text-muted mb-0">No generation log available yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-header">Video File</div>
             <div class="card-body">
                 {% if video.generation_log %}
                     <pre class="mb-0" style="white-space: pre-wrap;">{{ video.generation_log }}</pre>

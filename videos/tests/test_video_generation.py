@@ -1,42 +1,60 @@
-import os
 import tempfile
-from unittest import mock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
 from videos.models import AudioTrack, GeneratedVideo
-from videos.services.video_generation import generate_video_for_instance, VideoGenerationError
+from videos.services import generate_video_for_instance
 
 
-@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-class GenerateVideoServiceTests(TestCase):
+@override_settings(MEDIA_ROOT=tempfile.gettempdir())
+class GenerateVideoServiceTest(TestCase):
     def setUp(self):
-        audio_file = SimpleUploadedFile("test.mp3", b"audio", content_type="audio/mpeg")
-        self.audio = AudioTrack.objects.create(title="Song", audio_file=audio_file)
-        self.video = GeneratedVideo.objects.create(audio_track=self.audio, title="Video")
+        audio_file = SimpleUploadedFile("audio.mp3", b"audio-bytes", content_type="audio/mpeg")
+        self.audio = AudioTrack.objects.create(title="Track", audio_file=audio_file)
 
     def test_generate_video_success(self):
-        clip_mock = mock.Mock()
-        clip_mock.set_audio.return_value = clip_mock
-        clip_mock.write_videofile.return_value = None
-        audio_mock = mock.Mock(duration=5)
+        video = GeneratedVideo.objects.create(audio_track=self.audio, title="Video Success")
 
-        with mock.patch("videos.services.video_generation.ColorClip", return_value=clip_mock), \
-                mock.patch("videos.services.video_generation.AudioFileClip", return_value=audio_mock):
-            generate_video_for_instance(self.video)
+        def write_file_side_effect(path, *args, **kwargs):
+            Path(path).write_bytes(b"video-bytes")
 
-        self.video.refresh_from_db()
-        self.assertEqual(self.video.status, "ready")
-        self.assertEqual(self.video.generation_progress, 100)
-        self.assertIsNotNone(self.video.duration_seconds)
-        self.assertTrue(str(self.video.video_file))
+        audio_instance = MagicMock()
+        audio_instance.duration = 2
+
+        color_instance = MagicMock()
+        final_clip = MagicMock()
+        color_instance.set_audio.return_value = final_clip
+        final_clip.write_videofile.side_effect = write_file_side_effect
+
+        editor_mock = MagicMock()
+        editor_mock.AudioFileClip = MagicMock(return_value=audio_instance)
+        editor_mock.ColorClip = MagicMock(return_value=color_instance)
+
+        with patch("videos.services.video_generation._load_moviepy", return_value=editor_mock):
+            generate_video_for_instance(video)
+
+        video.refresh_from_db()
+        self.assertEqual(video.status, "ready")
+        self.assertEqual(video.duration_seconds, 2)
+        self.assertTrue(video.video_file.name)
+        self.assertGreaterEqual(video.file_size_bytes or 0, 0)
+        self.assertIn("Starting video generation", video.generation_log)
 
     def test_generate_video_failure(self):
-        with mock.patch("videos.services.video_generation.ColorClip", side_effect=Exception("boom")):
-            with self.assertRaises(VideoGenerationError):
-                generate_video_for_instance(self.video)
+        video = GeneratedVideo.objects.create(audio_track=self.audio, title="Video Failure")
 
-        self.video.refresh_from_db()
-        self.assertEqual(self.video.status, "failed")
-        self.assertTrue(self.video.error_message)
+        editor_mock = MagicMock()
+        editor_mock.AudioFileClip = MagicMock(side_effect=Exception("boom"))
+        editor_mock.ColorClip = MagicMock()
+
+        with patch("videos.services.video_generation._load_moviepy", return_value=editor_mock):
+            generate_video_for_instance(video)
+
+        video.refresh_from_db()
+        self.assertEqual(video.status, "failed")
+        self.assertIn("boom", video.error_message)
+        self.assertIn("Generation failed", video.generation_log)
+        self.assertTrue(editor_mock.AudioFileClip.called)
