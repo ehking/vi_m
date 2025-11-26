@@ -1,21 +1,58 @@
 import logging
 import os
-
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.core.files.base import ContentFile
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views import View
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
+from django.views.generic import (
+    CreateView,
+    DeleteView,
+    DetailView,
+    ListView,
+    TemplateView,
+    UpdateView,
+)
 from django.views.generic.edit import FormMixin
 
-from .forms import AudioTrackForm, GeneratedVideoForm, GeneratedVideoStatusForm, VideoProjectForm
-from .models import ActivityLog, AudioTrack, GeneratedVideo, VideoGenerationLog, VideoProject
+from .forms import (
+    AudioTrackForm,
+    GeneratedVideoForm,
+    GeneratedVideoStatusForm,
+    VideoProjectForm,
+)
+from .models import (
+    ActivityLog,
+    AudioTrack,
+    GeneratedVideo,
+    VideoGenerationLog,
+    VideoProject,
+)
 from .services.video_generation import VideoGenerationError, generate_video_for_instance
 
 logger = logging.getLogger(__name__)
+STATUS_BADGE_CLASSES = GeneratedVideo.STATUS_BADGE_CLASSES
+
+
+def _status_summary():
+    try:
+        status_totals = GeneratedVideo.objects.values("status").annotate(total=Count("id"))
+    except OperationalError:
+        return []
+
+    labels = dict(GeneratedVideo.STATUS_CHOICES)
+    return [
+        {
+            "key": row["status"],
+            "label": labels.get(row["status"], row["status"].title()),
+            "badge": STATUS_BADGE_CLASSES.get(row["status"], "secondary"),
+            "total": row["total"],
+        }
+        for row in status_totals
+    ]
 
 STATUS_BADGE_CLASSES = GeneratedVideo.STATUS_BADGE_CLASSES
 
@@ -57,12 +94,12 @@ class DashboardView(TemplateView):
         context = super().get_context_data(**kwargs)
         try:
             videos = GeneratedVideo.objects.all()
-            status_counts = list(videos.values('status').annotate(total=Count('id')))
-            status_map = {item['status']: item['total'] for item in status_counts}
-            context['status_summary'] = _status_summary()
+            status_counts = _status_summary()
+            status_map = {item["key"]: item["total"] for item in status_counts}
             context['status_ready'] = status_map.get('ready', 0)
             context['status_classes'] = STATUS_BADGE_CLASSES
             context['total_videos'] = videos.count()
+            context['status_counts'] = status_counts
             context['mood_counts'] = list(videos.values('mood').annotate(total=Count('id')))
             context['total_audio'] = AudioTrack.objects.count()
             context['total_projects'] = VideoProject.objects.count()
@@ -134,6 +171,20 @@ class GeneratedVideoDetailView(FormMixin, DetailView):
         kwargs['instance'] = self.get_object()
         return kwargs
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form'] = kwargs.get('form') or context.get('form') or self.get_form()
+        tags = []
+        if self.object.tags:
+            tags = [tag.strip() for tag in self.object.tags.split(',') if tag.strip()]
+        context['tags'] = tags
+        context['status_classes'] = STATUS_BADGE_CLASSES
+        context['generation_logs'] = list(
+            self.object.generation_logs.all().order_by('-created_at')[:100]
+        )
+        context['has_debug_access'] = self.request.user.is_staff
+        return context
+
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         form = self.get_form()
@@ -151,18 +202,33 @@ class GeneratedVideoDetailView(FormMixin, DetailView):
         context = self.get_context_data(form=form)
         return self.render_to_response(context)
 
+
+def generate_video_for_audio(audio_track: AudioTrack):
+    """Create a placeholder video file for the given audio track.
+
+    This helper is intentionally simple so it can be mocked in tests or swapped
+    for a real MoviePy-based implementation later.
+    """
+
+    # In a real system we would render visuals synchronized to the audio.
+    # For now, return deterministic bytes and a short duration.
+    return b"DEMO_MP4_DATA", 5
+
+
+class VideoGenerationDebugListView(TemplateView):
+    template_name = 'videos/debug_list.html'
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        tags = []
-        if self.object.tags:
-            tags = [tag.strip() for tag in self.object.tags.split(',') if tag.strip()]
-        context['tags'] = tags
-        context['status_classes'] = STATUS_BADGE_CLASSES
-        context["generation_logs"] = list(
-            self.object.generation_logs.all().order_by("-created_at")[:100]
+        context['recent_failures'] = list(
+            VideoGenerationLog.objects.select_related('video')
+            .filter(status='failed')
+            .order_by('-created_at')[:20]
         )
-        context["has_debug_access"] = self.request.user.is_staff
-        context['form'] = context.get('form') or self.get_form()
+        context['recent_activity'] = list(
+            VideoGenerationLog.objects.select_related('video')
+            .order_by('-created_at')[:20]
+        )
         return context
 
 
@@ -199,6 +265,28 @@ class VideoGenerationDebugListView(StaffRequiredMixin, ListView):
     template_name = "videos/debug_list.html"
     context_object_name = "generation_logs"
     paginate_by = 50
+
+
+class AudioGenerateVideoView(View):
+    def post(self, request, pk):
+        audio_track = get_object_or_404(AudioTrack, pk=pk)
+        video = GeneratedVideo.objects.create(audio_track=audio_track, title=audio_track.title)
+        try:
+            video_bytes, duration_seconds = generate_video_for_audio(audio_track)
+            filename = f"generated_audio_{audio_track.pk}.mp4"
+            video.video_file.save(filename, ContentFile(video_bytes), save=False)
+            video.duration_seconds = duration_seconds
+            video.status = "ready"
+            video.error_message = ""
+            video.save(update_fields=["video_file", "duration_seconds", "status", "error_message"])
+            messages.success(request, "Video generated successfully.")
+        except Exception as exc:  # pragma: no cover - surface errors to user
+            video.status = "failed"
+            video.error_message = str(exc)
+            video.save(update_fields=["status", "error_message"])
+            messages.error(request, f"Video generation failed: {exc}")
+
+        return redirect('audio-detail', pk=audio_track.pk)
 
 
 class GeneratedVideoCreateView(CreateView):
