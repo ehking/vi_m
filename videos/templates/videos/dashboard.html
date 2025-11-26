@@ -36,7 +36,15 @@
             {% for item in status_counts %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     {{ item.status|capfirst }}
-                    <span class="badge bg-primary rounded-pill">{{ item.total }}</span>
+                    {% if item.status == 'failed' %}
+                        <span class="badge bg-danger rounded-pill">{{ item.total }}</span>
+                    {% elif item.status == 'processing' %}
+                        <span class="badge bg-warning text-dark rounded-pill">{{ item.total }}</span>
+                    {% elif item.status == 'ready' %}
+                        <span class="badge bg-success rounded-pill">{{ item.total }}</span>
+                    {% else %}
+                        <span class="badge bg-secondary rounded-pill">{{ item.total }}</span>
+                    {% endif %}
                 </li>
             {% empty %}
                 <li class="list-group-item">No data yet.</li>
@@ -74,7 +82,17 @@
                     {% for video in recent_videos %}
                         <tr>
                             <td><a href="{% url 'video-detail' video.pk %}">{{ video.title }}</a></td>
-                            <td><span class="badge bg-info text-dark">{{ video.status|capfirst }}</span></td>
+                            <td>
+                                {% if video.status == 'failed' %}
+                                    <span class="badge bg-danger">{{ video.status|capfirst }}</span>
+                                {% elif video.status == 'processing' %}
+                                    <span class="badge bg-warning text-dark">{{ video.status|capfirst }}</span>
+                                {% elif video.status == 'ready' %}
+                                    <span class="badge bg-success">{{ video.status|capfirst }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ video.status|capfirst }}</span>
+                                {% endif %}
+                            </td>
                             <td>{{ video.created_at }}</td>
                         </tr>
                     {% empty %}

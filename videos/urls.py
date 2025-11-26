@@ -10,6 +10,7 @@ urlpatterns = [
     path('videos/create/', views.GeneratedVideoCreateView.as_view(), name='video-create'),
     path('videos/<int:pk>/generate/', views.generate_video, name='video_generate'),
     path('videos/<int:pk>/', views.GeneratedVideoDetailView.as_view(), name='video-detail'),
+    path('videos/<int:pk>/generate/', views.video_generate, name='video-generate'),
     path('videos/<int:pk>/edit/', views.GeneratedVideoUpdateView.as_view(), name='video-edit'),
     path('videos/<int:pk>/delete/', views.GeneratedVideoDeleteView.as_view(), name='video-delete'),
     path('audio/', views.AudioTrackListView.as_view(), name='audio-list'),
