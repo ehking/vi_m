@@ -1,4 +1,5 @@
 import importlib.util
+import importlib.util
 import os
 import tempfile
 import wave
@@ -11,7 +12,7 @@ from videos.models import AudioTrack, GeneratedVideo
 from videos.services.video_generation import generate_video_for_instance
 
 
-MOVIEPY_AVAILABLE = importlib.util.find_spec("moviepy") is not None
+MOVIEPY_AVAILABLE = importlib.util.find_spec("moviepy.editor") is not None
 
 
 @skipUnless(MOVIEPY_AVAILABLE, "moviepy is required for video generation tests")

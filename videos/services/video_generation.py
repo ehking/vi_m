@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -9,11 +10,6 @@ from django.utils import timezone
 from videos.styles import get_default_prompt_for_style, get_style_label
 
 logger = logging.getLogger(__name__)
-
-FALLBACK_VIDEO_BYTES = (
-    b"\x00\x00\x00 ftypisom\x00\x00\x02\x00isomiso2avc1mp41\x00\x00\x00"  # Minimal MP4 header
-    b"\x08free\x00\x00\x00\x14mdat\x00\x00\x00\x00"  # Trivial data payload
-)
 
 
 @dataclass
@@ -37,53 +33,23 @@ def _append_log(video, entries: List[str]) -> None:
 
 def _load_moviepy():
     try:
-        from moviepy import editor as moviepy_editor
+        import moviepy.editor as moviepy_editor
+        from moviepy.editor import AudioFileClip, ColorClip, VideoFileClip  # noqa: F401
     except Exception as exc:  # pragma: no cover - exercised via tests
         raise VideoGenerationError(
-            "MoviePy is not available. Install the 'moviepy' package to enable video generation.",
+            f"MoviePy could not be loaded: {exc}",
             code="moviepy_missing",
         ) from exc
 
     required_attrs = ["AudioFileClip", "ColorClip", "VideoFileClip"]
-    if not all(hasattr(moviepy_editor, attr) for attr in required_attrs):
+    missing = [attr for attr in required_attrs if not hasattr(moviepy_editor, attr)]
+    if missing:
         raise VideoGenerationError(
-            "MoviePy is installed but missing expected editor utilities.",
+            f"MoviePy is installed but missing editor utilities: {', '.join(missing)}.",
             code="moviepy_missing",
         )
 
     return moviepy_editor
-
-
-def _write_placeholder_video(video, log_entries: List[str]):
-    output_dir = os.path.join(settings.MEDIA_ROOT, "generated_videos")
-    os.makedirs(output_dir, exist_ok=True)
-    output_filename = f"generated_{getattr(video, 'id', 'placeholder')}.mp4"
-    output_path = os.path.join(output_dir, output_filename)
-
-    with open(output_path, "wb") as fp:
-        fp.write(FALLBACK_VIDEO_BYTES)
-
-    if hasattr(video, "video_file"):
-        video.video_file.name = os.path.join("generated_videos", output_filename)
-    if hasattr(video, "generation_progress"):
-        video.generation_progress = 100
-    if hasattr(video, "status"):
-        video.status = "ready"
-    if hasattr(video, "file_size_bytes"):
-        video.file_size_bytes = len(FALLBACK_VIDEO_BYTES)
-    if hasattr(video, "generation_log"):
-        log_entries.append("MoviePy unavailable; wrote placeholder video file.")
-        log_entries.append("Video generation completed successfully.")
-        _append_log(video, log_entries)
-
-    video.save(
-        update_fields=[
-            field
-            for field in ["video_file", "generation_progress", "status", "file_size_bytes", "generation_log"]
-            if hasattr(video, field)
-        ]
-    )
-    return video
 
 
 def build_final_prompt(video) -> str:
@@ -159,7 +125,7 @@ def _save_failure_state(video, exc: Exception):
 
 
 def generate_video_for_instance(video):
-    """Generate an MP4 for a GeneratedVideo instance using MoviePy or a placeholder."""
+    """Generate an MP4 for a GeneratedVideo instance using MoviePy."""
 
     log_entries: List[str] = []
 
@@ -171,11 +137,7 @@ def generate_video_for_instance(video):
     _save_processing_state(video)
 
     try:
-        try:
-            editor = _load_moviepy()
-        except VideoGenerationError as exc:
-            log_step(str(exc))
-            return _write_placeholder_video(video, log_entries)
+        editor = _load_moviepy()
 
         audio_file_field = getattr(getattr(video, "audio_track", None), "audio_file", None)
         background_file_field = getattr(getattr(video, "background_video", None), "video_file", None)
