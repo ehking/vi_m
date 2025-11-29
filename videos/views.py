@@ -35,6 +35,7 @@ from .models import (
     VideoGenerationLog,
     VideoProject,
 )
+from .styles import get_all_styles
 from .services.ai_integration import run_ai_video_job
 from .services.video_generation import (
     VideoGenerationError,
