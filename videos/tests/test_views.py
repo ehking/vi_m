@@ -8,7 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from videos.models import AudioTrack, GeneratedVideo
+from videos.models import AudioTrack, BackgroundVideo, GeneratedVideo
 from videos.services.video_generation import VideoGenerationError
 
 
@@ -53,8 +53,13 @@ class VideoViewsTest(TestCase):
         self.assertEqual(response.context['video'], video)
 
     def test_generate_ai_video_success(self):
-        video = GeneratedVideo.objects.create(audio_track=self.audio, title='Generate Me')
-        with patch('videos.views.generate_video_for_instance') as mock_generate:
+        background = BackgroundVideo.objects.create(
+            title='BG', video_file=SimpleUploadedFile('bg.mp4', b'bg', content_type='video/mp4')
+        )
+        video = GeneratedVideo.objects.create(
+            audio_track=self.audio, title='Generate Me', background_video=background
+        )
+        with patch('videos.views.generate_lyric_video_for_instance') as mock_generate:
             video.status = 'ready'
             mock_generate.return_value = video
             response = self.client.post(reverse('video-generate', args=[video.pk]))
@@ -62,8 +67,13 @@ class VideoViewsTest(TestCase):
         self.assertTrue(mock_generate.called)
 
     def test_generate_ai_video_failure(self):
-        video = GeneratedVideo.objects.create(audio_track=self.audio, title='Fail Me')
-        with patch('videos.views.generate_video_for_instance', side_effect=Exception('boom')):
+        background = BackgroundVideo.objects.create(
+            title='BG', video_file=SimpleUploadedFile('bg.mp4', b'bg', content_type='video/mp4')
+        )
+        video = GeneratedVideo.objects.create(
+            audio_track=self.audio, title='Fail Me', background_video=background
+        )
+        with patch('videos.views.generate_lyric_video_for_instance', side_effect=Exception('boom')):
             response = self.client.post(reverse('video-generate', args=[video.pk]))
         self.assertRedirects(response, reverse('video-detail', args=[video.pk]))
 

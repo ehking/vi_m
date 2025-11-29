@@ -1,5 +1,6 @@
 import logging
 import os
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.files.base import ContentFile
@@ -231,8 +232,22 @@ class GenerateVideoView(View):
             messages.info(request, "Video generation already in progress.")
             return redirect('video-detail', pk=video.pk)
 
+        if not getattr(video, "audio_track", None) or not getattr(video.audio_track, "audio_file", None):
+            messages.error(request, "Audio track with a valid audio file is required before generation.")
+            return redirect('video-detail', pk=pk)
+
+        background = getattr(video, "background_video", None)
+        if not background or not getattr(background, "video_file", None):
+            messages.error(request, "Please select a background video before generating.")
+            return redirect('video-detail', pk=pk)
+
+        background_path = os.path.join(settings.MEDIA_ROOT, background.video_file.name)
+        if not os.path.exists(background_path):
+            messages.error(request, "Background video file could not be found.")
+            return redirect('video-detail', pk=pk)
+
         try:
-            generate_video_for_instance(video)
+            generate_lyric_video_for_instance(video)
         except VideoGenerationError as exc:
             logger.warning("Video generation failed for video %s: %s", video.pk, exc)
             messages.error(request, f"Failed to generate video: {exc}")
@@ -250,7 +265,7 @@ class GenerateVideoView(View):
             description=f"Generated video {video.title}",
         )
         if video.status == "ready":
-            messages.success(request, 'AI video generated successfully.')
+            messages.success(request, 'Lyric video generated successfully.')
         else:
             messages.error(request, video.error_message or "Video generation failed.")
         return redirect('video-detail', pk=pk)
