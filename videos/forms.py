@@ -1,5 +1,11 @@
 from django import forms
-from .models import AudioTrack, GeneratedVideo, VideoProject
+from .models import (
+    AIProviderConfig,
+    AIVideoJob,
+    AudioTrack,
+    GeneratedVideo,
+    VideoProject,
+)
 from .styles import get_default_prompt_for_style
 
 
