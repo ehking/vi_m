@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 
 from videos.models import AudioTrack, GeneratedVideo
 from videos.services import generate_video_for_instance
-from videos.services.video_generation import FALLBACK_VIDEO_BYTES, VideoGenerationError
+from videos.services.video_generation import VideoGenerationError
 
 
 @override_settings(MEDIA_ROOT=tempfile.gettempdir())
@@ -60,25 +60,15 @@ class GenerateVideoServiceTest(TestCase):
         self.assertIn("Generation failed", video.generation_log)
         self.assertTrue(editor_mock.AudioFileClip.called)
 
-    def test_generate_video_fallback_when_moviepy_missing(self):
+    def test_generate_video_when_moviepy_missing_marks_failure(self):
         video = GeneratedVideo.objects.create(audio_track=self.audio, title="Video Missing MoviePy")
 
-        with patch(
-            "videos.services.video_generation._load_moviepy",
-            side_effect=VideoGenerationError(
-                "MoviePy is not available. Install the 'moviepy' package to enable video generation.",
-                code="moviepy_missing",
-            ),
-        ):
+        error = VideoGenerationError("MoviePy could not be loaded: missing", code="moviepy_missing")
+        with patch("videos.services.video_generation._load_moviepy", side_effect=error):
             generate_video_for_instance(video)
 
         video.refresh_from_db()
-        self.assertEqual(video.status, "ready")
-        self.assertEqual(video.generation_progress, 100)
-        self.assertTrue(video.video_file.name)
-        self.assertTrue(video.video_file.path.endswith(".mp4"))
-        self.assertTrue(video.video_file.storage.exists(video.video_file.name))
-        self.assertGreater(video.file_size_bytes or 0, 0)
-        with open(video.video_file.path, "rb") as f:
-            self.assertEqual(f.read(), FALLBACK_VIDEO_BYTES)
-        self.assertIn("placeholder video file", video.generation_log)
+        self.assertEqual(video.status, "failed")
+        self.assertEqual(video.generation_progress, 0)
+        self.assertIn("MoviePy could not be loaded", video.error_message)
+        self.assertIn("Generation failed", video.generation_log)

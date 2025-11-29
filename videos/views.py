@@ -3,7 +3,6 @@ import os
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.core.files.base import ContentFile
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
 from django.shortcuts import get_object_or_404, redirect, render
@@ -201,18 +200,6 @@ class GeneratedVideoDetailView(FormMixin, DetailView):
         return self.render_to_response(context)
 
 
-def generate_video_for_audio(audio_track: AudioTrack):
-    """Create a placeholder video file for the given audio track.
-
-    This helper is intentionally simple so it can be mocked in tests or swapped
-    for a real MoviePy-based implementation later.
-    """
-
-    # In a real system we would render visuals synchronized to the audio.
-    # For now, return deterministic bytes and a short duration.
-    return b"DEMO_MP4_DATA", 5
-
-
 class VideoGenerationDebugListView(TemplateView):
     template_name = 'videos/debug_list.html'
 
@@ -293,14 +280,12 @@ class AudioGenerateVideoView(View):
         audio_track = get_object_or_404(AudioTrack, pk=pk)
         video = GeneratedVideo.objects.create(audio_track=audio_track, title=audio_track.title)
         try:
-            video_bytes, duration_seconds = generate_video_for_audio(audio_track)
-            filename = f"generated_audio_{audio_track.pk}.mp4"
-            video.video_file.save(filename, ContentFile(video_bytes), save=False)
-            video.duration_seconds = duration_seconds
-            video.status = "ready"
-            video.error_message = ""
-            video.save(update_fields=["video_file", "duration_seconds", "status", "error_message"])
-            messages.success(request, "Video generated successfully.")
+            generate_video_for_instance(video)
+            video.refresh_from_db()
+            if video.status == "ready":
+                messages.success(request, "Video generated successfully.")
+            else:
+                messages.error(request, video.error_message or "Video generation failed.")
         except Exception as exc:  # pragma: no cover - surface errors to user
             video.status = "failed"
             video.error_message = str(exc)

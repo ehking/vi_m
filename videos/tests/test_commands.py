@@ -1,5 +1,7 @@
+import importlib.util
 import os
 import tempfile
+from unittest import skipUnless
 
 from django.core.management import call_command
 from django.test import TestCase, override_settings
@@ -7,6 +9,10 @@ from django.test import TestCase, override_settings
 from videos.models import AudioTrack, GeneratedVideo
 
 
+MOVIEPY_EDITOR_AVAILABLE = importlib.util.find_spec("moviepy.editor") is not None
+
+
+@skipUnless(MOVIEPY_EDITOR_AVAILABLE, "moviepy.editor is required for sample video command tests")
 class CreateSampleVideoCommandTest(TestCase):
     @override_settings(MEDIA_ROOT=tempfile.gettempdir())
     def test_creates_sample_audio_and_video(self):
