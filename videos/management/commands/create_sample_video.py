@@ -1,5 +1,7 @@
+import importlib
 import os
 from datetime import datetime
+import sys
 import wave
 from typing import Tuple
 
@@ -46,9 +48,13 @@ class Command(BaseCommand):
 
     def _require_moviepy(self):
         try:
-            import moviepy.editor as moviepy_editor
+            moviepy_editor = importlib.import_module("moviepy.editor")
         except Exception as exc:
-            raise CommandError(f"MoviePy is unavailable: {exc}") from exc
+            install_hint = (
+                "Install dependencies with the same interpreter you use for manage.py, e.g. "
+                f"`{sys.executable} -m pip install -r requirements.txt`."
+            )
+            raise CommandError(f"MoviePy is unavailable: {exc}. {install_hint}") from exc
 
         required = ["AudioClip", "AudioFileClip", "ColorClip", "VideoFileClip"]
         if not all(hasattr(moviepy_editor, attr) for attr in required):
