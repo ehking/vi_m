@@ -2,8 +2,10 @@ import importlib.util
 import os
 import tempfile
 from unittest import skipUnless
+from unittest.mock import patch
 
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
 from videos.models import AudioTrack, GeneratedVideo
@@ -45,3 +47,13 @@ class CreateSampleVideoCommandTest(TestCase):
         self.assertTrue(os.path.exists(video.video_file.path))
         self.assertEqual(video.status, "ready")
         self.assertEqual(video.generation_progress, 100)
+
+
+class CreateSampleVideoCommandMissingDepsTest(TestCase):
+    def test_requires_moviepy_with_install_hint(self):
+        with patch(
+            "videos.management.commands.create_sample_video.importlib.import_module",
+            side_effect=ImportError("No module named 'moviepy.editor'"),
+        ):
+            with self.assertRaisesMessage(CommandError, "Install dependencies with"):
+                call_command("create_sample_video")
