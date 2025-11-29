@@ -68,6 +68,7 @@
             </div>
         </div>
         <p><strong>Mood:</strong> {{ video.mood|default:'-'|capfirst }}</p>
+        <p><strong>Style:</strong> {{ video.style_label|default:video.style }}</p>
         <p><strong>Created:</strong> {{ video.created_at }}</p>
         <p><strong>Updated:</strong> {{ video.updated_at }}</p>
         <p><strong>Duration:</strong> {{ video.duration_seconds|default:'-' }} seconds</p>
@@ -88,6 +89,10 @@
         <p>{{ video.tags|default:'-' }}</p>
         <h4>Prompt</h4>
         <p>{{ video.prompt_used|default:'-' }}</p>
+        <h4>Style Prompt</h4>
+        <p>{{ video.style_prompt|default:'-' }}</p>
+        <h4>Extra Prompt</h4>
+        <p>{{ video.extra_prompt|default:'-' }}</p>
     </div>
     <div class="col-md-6">
         <h4>AI Metadata</h4>
