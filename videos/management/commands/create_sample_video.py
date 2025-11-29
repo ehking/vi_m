@@ -9,16 +9,6 @@ from django.conf import settings
 from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
 
-moviepy_spec = importlib.util.find_spec("moviepy.editor")
-if moviepy_spec is None:
-    raise CommandError(
-        "MoviePy is required to generate sample media. "
-        f"Install project dependencies for this interpreter with "
-        f"`{sys.executable} -m pip install -r requirements.txt`."
-    )
-
-from moviepy.editor import AudioClip, AudioFileClip, ColorClip, VideoFileClip
-
 from videos.models import AudioTrack, BackgroundVideo, GeneratedVideo
 from videos.services.video_generation import generate_video_for_instance
 
@@ -39,6 +29,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        (
+            self.AudioClip,
+            self.AudioFileClip,
+            self.ColorClip,
+            self.VideoFileClip,
+        ) = self._load_moviepy()
+
         title = options["title"]
         force = options["force"]
 
@@ -53,6 +50,19 @@ class Command(BaseCommand):
             )
         )
 
+    def _load_moviepy(self):
+        moviepy_spec = importlib.util.find_spec("moviepy.editor")
+        if moviepy_spec is None:
+            raise CommandError(
+                "MoviePy is required to generate sample media. "
+                f"Install project dependencies for this interpreter with "
+                f"`{sys.executable} -m pip install -r requirements.txt`.",
+            )
+
+        from moviepy.editor import AudioClip, AudioFileClip, ColorClip, VideoFileClip
+
+        return AudioClip, AudioFileClip, ColorClip, VideoFileClip
+
     def _ensure_audio_file(self, force: bool) -> Tuple[str, int]:
         """Create a short sine-wave audio file for demo purposes."""
 
@@ -61,7 +71,9 @@ class Command(BaseCommand):
         duration = 3
 
         if force or not os.path.exists(audio_path):
-            clip = AudioClip(lambda t: 0.5 * np.sin(2 * np.pi * 220 * t), duration=duration)
+            clip = self.AudioClip(
+                lambda t: 0.5 * np.sin(2 * np.pi * 220 * t), duration=duration
+            )
             clip.write_audiofile(audio_path, fps=44100, nbytes=2, verbose=False, logger=None)
             clip.close()
 
@@ -74,7 +86,9 @@ class Command(BaseCommand):
         video_path = os.path.join(settings.MEDIA_ROOT, "background_videos", "sample_background.mp4")
 
         if force or not os.path.exists(video_path):
-            color_clip = ColorClip(size=(640, 360), color=(20, 40, 80), duration=duration)
+            color_clip = self.ColorClip(
+                size=(640, 360), color=(20, 40, 80), duration=duration
+            )
             color_clip.write_videofile(
                 video_path,
                 fps=24,
