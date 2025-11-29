@@ -56,6 +56,9 @@ class GeneratedVideoForm(StyledModelForm):
             'video_file',
             'background_video',
             'thumbnail',
+            'style',
+            'style_prompt',
+            'extra_prompt',
             'mood',
             'tags',
             'status',
@@ -73,6 +76,8 @@ class GeneratedVideoForm(StyledModelForm):
         widgets = {
             'generation_progress': forms.NumberInput(attrs={'min': 0, 'max': 100}),
             'generation_log': forms.Textarea(attrs={'rows': 4}),
+            'style_prompt': forms.Textarea(attrs={'rows': 4}),
+            'extra_prompt': forms.Textarea(attrs={'rows': 3}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -85,11 +90,28 @@ class GeneratedVideoForm(StyledModelForm):
                 or self._meta.model._meta.get_field('status').default
             )
 
+        style_field = self.fields.get('style')
+        if style_field:
+            style_field.required = False
+            style_field.initial = style_field.initial or self._meta.model._meta.get_field('style').default
+
+        # Auto-populate style prompt when creating a new instance or when a style is preset
+        if 'style_prompt' in self.fields:
+            current_style = self.initial.get('style') or getattr(self.instance, 'style', None)
+            if not self.initial.get('style_prompt') and current_style:
+                self.initial['style_prompt'] = get_default_prompt_for_style(current_style)
+
     def clean_status(self):
         status = self.cleaned_data.get('status')
         if not status:
             return self._meta.model._meta.get_field('status').default
         return status
+
+    def clean_style(self):
+        style = self.cleaned_data.get('style')
+        if not style:
+            return self._meta.model._meta.get_field('style').default
+        return style
 
 
 class GeneratedVideoStatusForm(StyledModelForm):

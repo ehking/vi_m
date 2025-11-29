@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from .styles import get_default_prompt_for_style, get_style_choices, get_style_label
+
 
 class AudioTrack(models.Model):
     title = models.CharField(max_length=255)
@@ -85,6 +87,9 @@ class GeneratedVideo(models.Model):
     generation_progress = models.IntegerField(null=True, blank=True)
     generation_log = models.TextField(blank=True)
     error_code = models.CharField(max_length=100, blank=True)
+    style = models.CharField(max_length=50, choices=get_style_choices(), default="lyric_simple")
+    style_prompt = models.TextField(blank=True)
+    extra_prompt = models.TextField(blank=True)
     background_video = models.ForeignKey(
         BackgroundVideo,
         related_name="generated_videos",
@@ -105,6 +110,15 @@ class GeneratedVideo(models.Model):
     @property
     def status_badge_class(self):
         return self.STATUS_BADGE_CLASSES.get(self.status, "secondary")
+
+    @property
+    def style_label(self) -> str:
+        return get_style_label(self.style)
+
+    def save(self, *args, **kwargs):
+        if self.style and not self.style_prompt:
+            self.style_prompt = get_default_prompt_for_style(self.style)
+        super().save(*args, **kwargs)
 
 
 class VideoGenerationLog(models.Model):

@@ -250,6 +250,11 @@ class GenerateVideoView(View):
             messages.error(request, "Background video file could not be found.")
             return redirect('video-detail', pk=pk)
 
+        # Ensure the style prompt is populated before generation
+        if not video.style_prompt:
+            video.style_prompt = get_default_prompt_for_style(video.style)
+            video.save(update_fields=["style_prompt"])
+
         try:
             generate_lyric_video_for_instance(video)
         except VideoGenerationError as exc:
@@ -309,6 +314,14 @@ class GeneratedVideoCreateView(CreateView):
     form_class = GeneratedVideoForm
     template_name = 'videos/video_form.html'
     success_url = reverse_lazy('video-list')
+
+    def get_initial(self):
+        initial = super().get_initial()
+        style_param = self.request.GET.get("style")
+        if style_param and any(style_param == key for key, _ in get_style_choices()):
+            initial["style"] = style_param
+            initial["style_prompt"] = get_default_prompt_for_style(style_param)
+        return initial
 
     def form_valid(self, form):
         response = super().form_valid(form)
@@ -391,6 +404,15 @@ class AudioTrackListView(ListView):
     template_name = 'videos/audio_list.html'
     context_object_name = 'audio_tracks'
     paginate_by = 10
+
+
+class MusicVideoStyleListView(TemplateView):
+    template_name = 'videos/style_list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["styles"] = get_all_styles()
+        return context
 
 
 class AudioTrackDetailView(DetailView):

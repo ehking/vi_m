@@ -8,6 +8,8 @@ from typing import List, Optional
 from django.conf import settings
 from django.utils.text import slugify
 
+from videos.styles import get_default_prompt_for_style, get_style_label
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +66,28 @@ def _load_moviepy():
     return moviepy_editor
 
 
+def build_final_prompt(video) -> str:
+    style_label = get_style_label(getattr(video, "style", ""))
+    style_prompt = getattr(video, "style_prompt", "") or get_default_prompt_for_style(
+        getattr(video, "style", "")
+    )
+    lyrics = getattr(getattr(video, "audio_track", None), "lyrics", "") or "No lyrics provided."
+    extra = getattr(video, "extra_prompt", "") or "No additional instructions."
+    parts = [
+        f"Music video style: {style_label}",
+        "",
+        "Style description:",
+        style_prompt,
+        "",
+        "Lyrics:",
+        lyrics,
+        "",
+        "Extra instructions:",
+        extra,
+    ]
+    return "\n".join(parts)
+
+
 def generate_video_for_instance(video):
     """
     Receives a GeneratedVideo instance (or equivalent model).
@@ -71,6 +95,10 @@ def generate_video_for_instance(video):
     Logs each major step.
     Returns the updated instance.
     """
+
+    # Combine prompts for auditing/debugging
+    video.prompt_used = build_final_prompt(video)
+    video.save(update_fields=["prompt_used"])
 
     log_entries: List[str] = []
 
@@ -225,6 +253,11 @@ def generate_lyric_video_for_instance(video):
         log_entries.append(message)
 
     try:
+        if not getattr(video, "style_prompt", ""):
+            video.style_prompt = get_default_prompt_for_style(getattr(video, "style", ""))
+        video.prompt_used = build_final_prompt(video)
+        video.save(update_fields=["style_prompt", "prompt_used"])
+
         video.status = "processing"
         video.generation_progress = 10
         video.error_message = ""
