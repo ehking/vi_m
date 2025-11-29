@@ -1,16 +1,15 @@
-import importlib.util
 import os
-import sys
 from datetime import datetime
+import wave
 from typing import Tuple
 
 import numpy as np
 from django.conf import settings
 from django.core.files import File
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
 from videos.models import AudioTrack, BackgroundVideo, GeneratedVideo
-from videos.services.video_generation import generate_video_for_instance
+from videos.services.video_generation import FALLBACK_VIDEO_BYTES, generate_video_for_instance
 
 
 class Command(BaseCommand):
@@ -29,15 +28,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        (
-            self.AudioClip,
-            self.AudioFileClip,
-            self.ColorClip,
-            self.VideoFileClip,
-        ) = self._load_moviepy()
-
         title = options["title"]
         force = options["force"]
+
+        self.moviepy_editor = self._try_load_moviepy()
 
         audio = self._get_or_create_audio(force=force)
         background = self._get_or_create_background_video(force=force)
@@ -50,18 +44,27 @@ class Command(BaseCommand):
             )
         )
 
-    def _load_moviepy(self):
-        moviepy_spec = importlib.util.find_spec("moviepy.editor")
-        if moviepy_spec is None:
-            raise CommandError(
-                "MoviePy is required to generate sample media. "
-                f"Install project dependencies for this interpreter with "
-                f"`{sys.executable} -m pip install -r requirements.txt`.",
+    def _try_load_moviepy(self):
+        try:
+            from moviepy import editor as moviepy_editor
+        except Exception:
+            self.stdout.write(
+                self.style.WARNING(
+                    "MoviePy is unavailable; sample assets will use lightweight placeholders."
+                )
             )
+            return None
 
-        from moviepy.editor import AudioClip, AudioFileClip, ColorClip, VideoFileClip
+        required = ["AudioClip", "AudioFileClip", "ColorClip", "VideoFileClip"]
+        if not all(hasattr(moviepy_editor, attr) for attr in required):
+            self.stdout.write(
+                self.style.WARNING(
+                    "MoviePy installation is missing editor utilities; falling back to placeholders."
+                )
+            )
+            return None
 
-        return AudioClip, AudioFileClip, ColorClip, VideoFileClip
+        return moviepy_editor
 
     def _ensure_audio_file(self, force: bool) -> Tuple[str, int]:
         """Create a short sine-wave audio file for demo purposes."""
@@ -71,11 +74,23 @@ class Command(BaseCommand):
         duration = 3
 
         if force or not os.path.exists(audio_path):
-            clip = self.AudioClip(
-                lambda t: 0.5 * np.sin(2 * np.pi * 220 * t), duration=duration
-            )
-            clip.write_audiofile(audio_path, fps=44100, nbytes=2, verbose=False, logger=None)
-            clip.close()
+            if self.moviepy_editor:
+                clip = self.moviepy_editor.AudioClip(
+                    lambda t: 0.5 * np.sin(2 * np.pi * 220 * t), duration=duration
+                )
+                clip.write_audiofile(audio_path, fps=44100, nbytes=2, verbose=False, logger=None)
+                clip.close()
+            else:
+                sample_rate = 44100
+                amplitude = 32767 * 0.5
+                samples = (np.sin(2 * np.pi * 220 * np.arange(duration * sample_rate) / sample_rate) * amplitude).astype(
+                    np.int16
+                )
+                with wave.open(audio_path, "wb") as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(sample_rate)
+                    wav_file.writeframes(samples.tobytes())
 
         return audio_path, duration
 
@@ -86,18 +101,22 @@ class Command(BaseCommand):
         video_path = os.path.join(settings.MEDIA_ROOT, "background_videos", "sample_background.mp4")
 
         if force or not os.path.exists(video_path):
-            color_clip = self.ColorClip(
-                size=(640, 360), color=(20, 40, 80), duration=duration
-            )
-            color_clip.write_videofile(
-                video_path,
-                fps=24,
-                codec="libx264",
-                audio=False,
-                verbose=False,
-                logger=None,
-            )
-            color_clip.close()
+            if self.moviepy_editor:
+                color_clip = self.moviepy_editor.ColorClip(
+                    size=(640, 360), color=(20, 40, 80), duration=duration
+                )
+                color_clip.write_videofile(
+                    video_path,
+                    fps=24,
+                    codec="libx264",
+                    audio=False,
+                    verbose=False,
+                    logger=None,
+                )
+                color_clip.close()
+            else:
+                with open(video_path, "wb") as fp:
+                    fp.write(FALLBACK_VIDEO_BYTES)
 
         return video_path
 
