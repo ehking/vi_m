@@ -1,6 +1,6 @@
+import importlib.util
 import os
 import sys
-import traceback
 from datetime import datetime
 from typing import Tuple
 
@@ -9,18 +9,15 @@ from django.conf import settings
 from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
 
-try:
-    from moviepy.editor import AudioClip, AudioFileClip, ColorClip, VideoFileClip
-except Exception as e:
-    print("==== MoviePy import failed ====")
-    print("Exception:", repr(e))
-    print("sys.executable:", sys.executable)
-    print("sys.path:", sys.path)
-    traceback.print_exc()
+moviepy_spec = importlib.util.find_spec("moviepy.editor")
+if moviepy_spec is None:
     raise CommandError(
-        "MoviePy import failed. See the output above for details. "
-        "moviepy is installed but may not be visible in this Python environment."
+        "MoviePy is required to generate sample media. "
+        f"Install project dependencies for this interpreter with "
+        f"`{sys.executable} -m pip install -r requirements.txt`."
     )
+
+from moviepy.editor import AudioClip, AudioFileClip, ColorClip, VideoFileClip
 
 from videos.models import AudioTrack, BackgroundVideo, GeneratedVideo
 from videos.services.video_generation import generate_video_for_instance
