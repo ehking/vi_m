@@ -36,7 +36,11 @@ from .models import (
     VideoProject,
 )
 from .services.ai_integration import run_ai_video_job
-from .services.video_generation import VideoGenerationError, generate_video_for_instance
+from .services.video_generation import (
+    VideoGenerationError,
+    generate_lyric_video_for_instance,
+    generate_video_for_instance,
+)
 
 logger = logging.getLogger(__name__)
 STATUS_BADGE_CLASSES = GeneratedVideo.STATUS_BADGE_CLASSES
