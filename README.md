@@ -5,10 +5,14 @@ A local-first Django application for managing audio tracks and AI-generated musi
 ## Installation
 
 1. Create and activate a virtual environment.
-2. Install dependencies:
+2. Install dependencies with the **same interpreter you will use to run Django** so optional
+   dependencies like MoviePy are available to `python manage.py` commands:
    ```bash
-   pip install -r requirements.txt
+   python3 -m pip install -r requirements.txt
    ```
+   If you see `ModuleNotFoundError: No module named 'moviepy.editor'` while running a management
+   command, double-check that `python3 -m pip show moviepy` reports a location under the interpreter
+   shown by `python3 -c "import sys; print(sys.executable)"`.
 
 ## Database setup
 
