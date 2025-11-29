@@ -1,5 +1,14 @@
 from django import forms
-from .models import AudioTrack, GeneratedVideo, VideoProject, AIProviderConfig, AIVideoJob
+from django.apps import apps
+from .models import AudioTrack, GeneratedVideo, VideoProject
+
+
+def _get_ai_provider_model():
+    return apps.get_model("videos", "AIProviderConfig")
+
+
+def _get_ai_video_job_model():
+    return apps.get_model("videos", "AIVideoJob")
 
 
 class StyledModelForm(forms.ModelForm):
@@ -131,7 +140,7 @@ class VideoProjectForm(StyledModelForm):
 
 class AIProviderConfigForm(StyledModelForm):
     class Meta:
-        model = AIProviderConfig
+        model = _get_ai_provider_model()
         fields = [
             'name',
             'base_url',
@@ -149,7 +158,7 @@ class AIProviderConfigForm(StyledModelForm):
 
 class AIVideoJobCreateForm(StyledModelForm):
     class Meta:
-        model = AIVideoJob
+        model = _get_ai_video_job_model()
         fields = [
             'provider',
             'audio_track',
@@ -162,5 +171,6 @@ class AIVideoJobCreateForm(StyledModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        provider_model = _get_ai_provider_model()
         if 'provider' in self.fields:
-            self.fields['provider'].queryset = AIProviderConfig.objects.filter(is_active=True)
+            self.fields['provider'].queryset = provider_model.objects.filter(is_active=True)
