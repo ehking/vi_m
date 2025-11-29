@@ -1,6 +1,8 @@
 from django import forms
 from django.apps import apps
+
 from .models import AudioTrack, GeneratedVideo, VideoProject
+from .styles import get_default_prompt_for_style
 
 
 def _get_ai_provider_model():
