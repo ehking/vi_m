@@ -18,6 +18,18 @@ class AudioTrack(models.Model):
         return self.title
 
 
+class BackgroundVideo(models.Model):
+    title = models.CharField(max_length=255)
+    video_file = models.FileField(upload_to="background_videos/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
 class GeneratedVideo(models.Model):
     MOOD_CHOICES = [
         ("sad", "Sad"),
@@ -73,6 +85,13 @@ class GeneratedVideo(models.Model):
     generation_progress = models.IntegerField(null=True, blank=True)
     generation_log = models.TextField(blank=True)
     error_code = models.CharField(max_length=100, blank=True)
+    background_video = models.ForeignKey(
+        BackgroundVideo,
+        related_name="generated_videos",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     seed = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

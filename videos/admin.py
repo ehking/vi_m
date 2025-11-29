@@ -9,6 +9,7 @@ from django.utils.html import format_html
 from .models import (
     ActivityLog,
     AudioTrack,
+    BackgroundVideo,
     GeneratedVideo,
     VideoGenerationLog,
     VideoProject,
@@ -30,12 +31,19 @@ class AudioTrackAdmin(admin.ModelAdmin):
     inlines = [GeneratedVideoInline]
 
 
+@admin.register(BackgroundVideo)
+class BackgroundVideoAdmin(admin.ModelAdmin):
+    list_display = ("title", "created_at")
+    search_fields = ("title",)
+
+
 @admin.register(GeneratedVideo)
 class GeneratedVideoAdmin(admin.ModelAdmin):
     list_display = (
         "thumbnail_preview",
         "title",
         "audio_track",
+        "background_video",
         "status",
         "generation_progress",
         "mood",

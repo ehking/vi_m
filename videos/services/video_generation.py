@@ -3,7 +3,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from django.conf import settings
 from django.utils.text import slugify
@@ -210,4 +210,144 @@ def generate_video_for_instance(video):
         video.error_message = str(exc)
         video.generation_progress = 0
         video.save(update_fields=["status", "error_message", "generation_progress", "generation_log"])
+        return video
+
+
+def generate_lyric_video_for_instance(video):
+    """Generate a lyric video using an existing background clip and audio track."""
+
+    log_entries: List[str] = []
+
+    def log_step(message: str) -> None:
+        logger.info(message)
+        log_entries.append(message)
+
+    try:
+        video.status = "processing"
+        video.generation_progress = 10
+        video.error_message = ""
+        video.last_error_message = ""
+        video.save(
+            update_fields=["status", "generation_progress", "error_message", "last_error_message"]
+        )
+
+        audio_track = getattr(video, "audio_track", None)
+        audio_file_field = getattr(audio_track, "audio_file", None)
+        if not audio_track or not audio_file_field or not audio_file_field.name:
+            raise VideoGenerationError("Audio file is missing for this video.", code="audio_missing")
+
+        bg_field: Optional[object] = getattr(video, "background_video", None)
+        bg_file_field = getattr(bg_field, "video_file", None)
+        if not bg_file_field or not getattr(bg_file_field, "name", ""):
+            raise VideoGenerationError("Background video is required for lyric generation.", code="background_missing")
+
+        audio_path = os.path.join(settings.MEDIA_ROOT, audio_file_field.name)
+        bg_path = os.path.join(settings.MEDIA_ROOT, bg_file_field.name)
+        if not os.path.exists(audio_path):
+            raise VideoGenerationError("Audio file not found on disk.", code="audio_missing")
+        if not os.path.exists(bg_path):
+            raise VideoGenerationError("Background video file not found on disk.", code="background_missing")
+
+        log_step(f"Loading audio from {audio_path}")
+        log_step(f"Loading background video from {bg_path}")
+
+        from moviepy.editor import AudioFileClip, CompositeVideoClip, TextClip, VideoFileClip
+
+        audio_clip = None
+        bg_clip = None
+        final_clip = None
+        try:
+            audio_clip = AudioFileClip(audio_path)
+            bg_clip = VideoFileClip(bg_path).resize((1280, 720))
+
+            duration = min(bg_clip.duration or 0, audio_clip.duration or 0) or audio_clip.duration or bg_clip.duration or 0
+            duration = float(duration)
+            if duration <= 0:
+                raise VideoGenerationError("Unable to determine duration for video composition.", code="duration_invalid")
+
+            lyrics_text = getattr(audio_track, "lyrics", "") or ""
+            txt_clip = (
+                TextClip(
+                    txt=lyrics_text,
+                    fontsize=50,
+                    color="white",
+                    stroke_color="black",
+                    stroke_width=3,
+                    method="caption",
+                    size=(1000, 600),
+                )
+                .set_position("center")
+                .set_duration(duration)
+            )
+
+            final_clip = CompositeVideoClip([bg_clip.set_duration(duration), txt_clip]).set_audio(audio_clip)
+
+            output_dir = os.path.join(settings.MEDIA_ROOT, "generated_videos")
+            os.makedirs(output_dir, exist_ok=True)
+            output_relative = f"generated_videos/generated_{video.id}.mp4"
+            output_full_path = os.path.join(settings.MEDIA_ROOT, output_relative)
+
+            log_step(f"Writing lyric video to {output_full_path}")
+            final_clip.write_videofile(
+                output_full_path,
+                fps=24,
+                codec="libx264",
+                audio_codec="aac",
+                verbose=False,
+                logger=None,
+            )
+
+        finally:
+            if final_clip:
+                final_clip.close()
+            if bg_clip:
+                bg_clip.close()
+            if audio_clip:
+                audio_clip.close()
+
+        if not os.path.exists(output_full_path):
+            raise VideoGenerationError("Lyric video file was not created.", code="output_missing")
+
+        video.video_file.name = output_relative
+        video.file_size_bytes = os.path.getsize(output_full_path)
+        video.duration_seconds = int(duration)
+        video.resolution = "1280x720"
+        video.aspect_ratio = "16:9"
+        video.status = "ready"
+        video.generation_progress = 100
+        video.generation_time_ms = video.generation_time_ms or 0
+
+        _append_log(video, log_entries)
+        video.save(
+            update_fields=[
+                "video_file",
+                "file_size_bytes",
+                "duration_seconds",
+                "resolution",
+                "aspect_ratio",
+                "status",
+                "generation_progress",
+                "generation_time_ms",
+                "generation_log",
+            ]
+        )
+        return video
+
+    except Exception as exc:
+        logger.exception("Lyric video generation failed", exc_info=exc)
+        log_step(f"Generation failed: {exc}")
+        _append_log(video, log_entries)
+        video.status = "failed"
+        video.error_message = str(exc)
+        video.last_error_message = str(exc)
+        video.generation_progress = 0
+        video.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "last_error_message",
+                "generation_progress",
+                "generation_log",
+            ]
+        )
         return video
