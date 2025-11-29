@@ -326,6 +326,7 @@ class GeneratedVideoCreateView(CreateView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
+        video = self.object
         self._update_file_metadata()
         ActivityLog.objects.create(
             user=_activity_user(self.request),
@@ -336,15 +337,12 @@ class GeneratedVideoCreateView(CreateView):
         )
 
         try:
-            updated_video = generate_video_for_instance(self.object)
-            if updated_video.status == "ready":
-                messages.success(self.request, 'Video generated successfully.')
-            else:
-                error_message = updated_video.error_message or 'Video generation failed.'
-                messages.error(self.request, error_message)
+            generate_video_for_instance(video)
+            messages.success(self.request, 'Video generated successfully.')
         except Exception as exc:  # pragma: no cover - surface errors to user
             logger.exception("Video generation failed during creation")
-            messages.error(self.request, f"Video generation failed: {exc}")
+            error_text = getattr(video, "last_error_message", "") or str(exc)
+            messages.error(self.request, f"Video generation failed: {error_text}")
 
         return response
 
