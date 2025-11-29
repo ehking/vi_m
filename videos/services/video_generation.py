@@ -204,7 +204,7 @@ def generate_video_for_instance(video):
             video.generation_progress = 100
             video.generation_time_ms = int((time.monotonic() - start_time) * 1000)
 
-            log_step("Video generation completed successfully.")
+            log_step("Video generation completed successfully using placeholder content.")
 
             _append_log(video, log_entries)
             video.save(
