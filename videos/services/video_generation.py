@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from django.conf import settings
+from django.utils import timezone
 
 from videos.styles import get_default_prompt_for_style, get_style_label
 
@@ -81,11 +82,24 @@ def generate_video_for_instance(video):
         logger.info(message)
         log_entries.append(message)
 
+    logger.info("Starting video generation for GeneratedVideo %s", video.pk)
+
     video.status = "processing"
     video.generation_progress = 10
     video.error_message = ""
     video.error_code = ""
-    video.save(update_fields=["status", "generation_progress", "error_message", "error_code"])
+    video.last_error_message = ""
+    video.last_error_at = None
+    video.save(
+        update_fields=[
+            "status",
+            "generation_progress",
+            "error_message",
+            "error_code",
+            "last_error_message",
+            "last_error_at",
+        ]
+    )
 
     try:
         audio_field = getattr(video, "audio_track", None)
@@ -117,6 +131,7 @@ def generate_video_for_instance(video):
         audio_clip = None
         final_clip = None
         trimmed_bg = None
+        trimmed_audio = None
 
         try:
             bg_clip = VideoFileClip(bg_path)
@@ -167,7 +182,10 @@ def generate_video_for_instance(video):
         video.status = "ready"
         video.generation_progress = 100
         video.generation_time_ms = video.generation_time_ms or 0
+        video.last_error_message = ""
+        video.last_error_at = None
 
+        log_step("Video generation succeeded")
         _append_log(video, log_entries)
         video.save(
             update_fields=[
@@ -180,6 +198,8 @@ def generate_video_for_instance(video):
                 "generation_progress",
                 "generation_time_ms",
                 "generation_log",
+                "last_error_message",
+                "last_error_at",
             ]
         )
         return video
@@ -190,9 +210,19 @@ def generate_video_for_instance(video):
         video.status = "failed"
         video.error_message = str(exc)
         video.error_code = exc.code
+        video.last_error_message = str(exc)
+        video.last_error_at = timezone.now()
         video.generation_progress = 0
         video.save(
-            update_fields=["status", "error_message", "error_code", "generation_progress", "generation_log"]
+            update_fields=[
+                "status",
+                "error_message",
+                "error_code",
+                "last_error_message",
+                "last_error_at",
+                "generation_progress",
+                "generation_log",
+            ]
         )
         return video
     except Exception as exc:  # pragma: no cover - defensive catch
@@ -201,8 +231,19 @@ def generate_video_for_instance(video):
         _append_log(video, log_entries)
         video.status = "failed"
         video.error_message = str(exc)
+        video.last_error_message = str(exc)
+        video.last_error_at = timezone.now()
         video.generation_progress = 0
-        video.save(update_fields=["status", "error_message", "generation_progress", "generation_log"])
+        video.save(
+            update_fields=[
+                "status",
+                "error_message",
+                "last_error_message",
+                "last_error_at",
+                "generation_progress",
+                "generation_log",
+            ]
+        )
         return video
 
 

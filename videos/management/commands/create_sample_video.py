@@ -1,13 +1,15 @@
 import os
 from datetime import datetime
+from typing import Tuple
 
-from django.core.files.base import ContentFile
+import numpy as np
+from django.conf import settings
+from django.core.files import File
 from django.core.management.base import BaseCommand
+from moviepy.editor import AudioClip, ColorClip
 
-from videos.models import AudioTrack, GeneratedVideo
-
-SAMPLE_AUDIO_BYTES = b"ID3\x04\x00\x00\x00\x00\x00\x21'Demo MP3 data"
-SAMPLE_VIDEO_BYTES = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42mp41demo video content"
+from videos.models import AudioTrack, BackgroundVideo, GeneratedVideo
+from videos.services.video_generation import generate_video_for_instance
 
 
 class Command(BaseCommand):
@@ -30,21 +32,56 @@ class Command(BaseCommand):
         force = options["force"]
 
         audio = self._get_or_create_audio(force=force)
-        video = self._get_or_create_video(audio, title=title, force=force)
-        self._update_file_metadata(video)
+        background = self._get_or_create_background_video(force=force)
+        video = self._get_or_create_video(audio, background, title=title, force=force)
+        video = generate_video_for_instance(video)
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Sample video '{video.title}' ready with audio track '{audio.title}'."
+                f"Sample video '{video.title}' ready with audio track '{audio.title}'.",
             )
         )
 
+    def _ensure_audio_file(self, force: bool) -> Tuple[str, int]:
+        """Create a short sine-wave audio file for demo purposes."""
+
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, "audio"), exist_ok=True)
+        audio_path = os.path.join(settings.MEDIA_ROOT, "audio", "sample_tone.wav")
+        duration = 3
+
+        if force or not os.path.exists(audio_path):
+            clip = AudioClip(lambda t: 0.5 * np.sin(2 * np.pi * 220 * t), duration=duration)
+            clip.write_audiofile(audio_path, fps=44100, nbytes=2, verbose=False, logger=None)
+            clip.close()
+
+        return audio_path, duration
+
+    def _ensure_background_file(self, force: bool, duration: int) -> str:
+        """Create a simple background video clip for demo purposes."""
+
+        os.makedirs(os.path.join(settings.MEDIA_ROOT, "background_videos"), exist_ok=True)
+        video_path = os.path.join(settings.MEDIA_ROOT, "background_videos", "sample_background.mp4")
+
+        if force or not os.path.exists(video_path):
+            color_clip = ColorClip(size=(640, 360), color=(20, 40, 80), duration=duration)
+            color_clip.write_videofile(
+                video_path,
+                fps=24,
+                codec="libx264",
+                audio=False,
+                verbose=False,
+                logger=None,
+            )
+            color_clip.close()
+
+        return video_path
+
     def _get_or_create_audio(self, force: bool) -> AudioTrack:
-        audio, created = AudioTrack.objects.get_or_create(
+        audio_path, duration = self._ensure_audio_file(force=force)
+        audio, _ = AudioTrack.objects.get_or_create(
             title="Sample Audio Track",
             defaults={
                 "artist": "System",
-                "audio_file": ContentFile(SAMPLE_AUDIO_BYTES, name="sample.mp3"),
                 "lyrics": "Sample lyrics for demo playback",
                 "language": "en",
                 "bpm": 120,
@@ -52,47 +89,61 @@ class Command(BaseCommand):
         )
 
         if force or not audio.audio_file:
-            audio.audio_file.save("sample.mp3", ContentFile(SAMPLE_AUDIO_BYTES), save=True)
+            with open(audio_path, "rb") as fp:
+                audio.audio_file.save("sample_tone.wav", File(fp), save=False)
+            audio.save(update_fields=["audio_file"])
+
+        if not audio.audio_file:
+            with open(audio_path, "rb") as fp:
+                audio.audio_file.save("sample_tone.wav", File(fp), save=True)
+
         return audio
 
-    def _get_or_create_video(self, audio: AudioTrack, title: str, force: bool) -> GeneratedVideo:
+    def _get_or_create_background_video(self, force: bool) -> BackgroundVideo:
+        _, audio_duration = self._ensure_audio_file(force=False)
+        video_path = self._ensure_background_file(force=force, duration=audio_duration)
+
+        background, _ = BackgroundVideo.objects.get_or_create(title="Sample Background")
+
+        if force or not background.video_file:
+            with open(video_path, "rb") as fp:
+                background.video_file.save("sample_background.mp4", File(fp), save=False)
+            background.save(update_fields=["video_file"])
+
+        if not background.video_file:
+            with open(video_path, "rb") as fp:
+                background.video_file.save("sample_background.mp4", File(fp), save=True)
+
+        return background
+
+    def _get_or_create_video(
+        self, audio: AudioTrack, background: BackgroundVideo, title: str, force: bool
+    ) -> GeneratedVideo:
         now = datetime.utcnow().isoformat()
         defaults = {
             "audio_track": audio,
+            "background_video": background,
             "description": "Sample generated video for showcasing the dashboard.",
-            "video_file": ContentFile(SAMPLE_VIDEO_BYTES, name="sample.mp4"),
-            "status": "ready",
+            "status": "pending",
             "mood": "happy",
             "tags": "sample,demo",
             "prompt_used": "Sample prompt",
             "model_name": "demo-generator",
-            "generation_progress": 100,
-            "generation_log": f"Generated sample video at {now}",
+            "generation_progress": 0,
+            "generation_log": f"Queued sample video generation at {now}",
         }
 
-        video, created = GeneratedVideo.objects.get_or_create(title=title, defaults=defaults)
+        video, _ = GeneratedVideo.objects.get_or_create(title=title, defaults=defaults)
 
-        if force or not video.video_file:
-            video.video_file.save("sample.mp4", ContentFile(SAMPLE_VIDEO_BYTES), save=False)
-            video.status = "ready"
-            video.generation_progress = 100
-            video.generation_log = f"Regenerated sample video at {now}"
-            video.save()
+        updates = {}
+        if force or not video.audio_track_id:
+            updates["audio_track"] = audio
+        if force or not video.background_video_id:
+            updates["background_video"] = background
 
-        if not video.audio_track_id:
-            video.audio_track = audio
-            video.save(update_fields=["audio_track"])
+        if updates:
+            for field, value in updates.items():
+                setattr(video, field, value)
+            video.save(update_fields=list(updates.keys()))
 
         return video
-
-    def _update_file_metadata(self, video: GeneratedVideo) -> None:
-        video_file = video.video_file
-        if video_file and hasattr(video_file, "path") and os.path.exists(video_file.path):
-            video.file_size_bytes = os.path.getsize(video_file.path)
-            if not video.duration_seconds:
-                video.duration_seconds = 0
-            if not video.resolution:
-                video.resolution = ""
-            if not video.aspect_ratio:
-                video.aspect_ratio = ""
-            video.save()
