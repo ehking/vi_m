@@ -1,4 +1,6 @@
 import os
+import sys
+import traceback
 from datetime import datetime
 from typing import Tuple
 
@@ -7,23 +9,25 @@ from django.conf import settings
 from django.core.files import File
 from django.core.management.base import BaseCommand, CommandError
 
+try:
+    from moviepy.editor import AudioClip, AudioFileClip, ColorClip, VideoFileClip
+except Exception as e:
+    print("==== MoviePy import failed ====")
+    print("Exception:", repr(e))
+    print("sys.executable:", sys.executable)
+    print("sys.path:", sys.path)
+    traceback.print_exc()
+    raise CommandError(
+        "MoviePy import failed. See the output above for details. "
+        "moviepy is installed but may not be visible in this Python environment."
+    )
+
 from videos.models import AudioTrack, BackgroundVideo, GeneratedVideo
 from videos.services.video_generation import generate_video_for_instance
 
 
 class Command(BaseCommand):
     help = "Create a sample audio track and generated video for demos or local testing."
-
-    def _import_moviepy(self):
-        try:
-            from moviepy.editor import AudioClip, ColorClip
-        except ImportError as exc:
-            raise CommandError(
-                "moviepy is required for sample video generation. "
-                "Install dependencies with 'pip install -r requirements.txt'."
-            ) from exc
-
-        return AudioClip, ColorClip
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -55,8 +59,6 @@ class Command(BaseCommand):
     def _ensure_audio_file(self, force: bool) -> Tuple[str, int]:
         """Create a short sine-wave audio file for demo purposes."""
 
-        AudioClip, _ = self._import_moviepy()
-
         os.makedirs(os.path.join(settings.MEDIA_ROOT, "audio"), exist_ok=True)
         audio_path = os.path.join(settings.MEDIA_ROOT, "audio", "sample_tone.wav")
         duration = 3
@@ -70,8 +72,6 @@ class Command(BaseCommand):
 
     def _ensure_background_file(self, force: bool, duration: int) -> str:
         """Create a simple background video clip for demo purposes."""
-
-        _, ColorClip = self._import_moviepy()
 
         os.makedirs(os.path.join(settings.MEDIA_ROOT, "background_videos"), exist_ok=True)
         video_path = os.path.join(settings.MEDIA_ROOT, "background_videos", "sample_background.mp4")
