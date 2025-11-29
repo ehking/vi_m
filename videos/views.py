@@ -333,7 +333,18 @@ class GeneratedVideoCreateView(CreateView):
             object_id=self.object.id,
             description=f"Created video {self.object.title}",
         )
-        messages.success(self.request, 'Video created successfully.')
+
+        try:
+            updated_video = generate_video_for_instance(self.object)
+            if updated_video.status == "ready":
+                messages.success(self.request, 'Video generated successfully.')
+            else:
+                error_message = updated_video.error_message or 'Video generation failed.'
+                messages.error(self.request, error_message)
+        except Exception as exc:  # pragma: no cover - surface errors to user
+            logger.exception("Video generation failed during creation")
+            messages.error(self.request, f"Video generation failed: {exc}")
+
         return response
 
     def _update_file_metadata(self):
