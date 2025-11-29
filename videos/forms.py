@@ -45,6 +45,7 @@ class GeneratedVideoForm(StyledModelForm):
             'title',
             'description',
             'video_file',
+            'background_video',
             'thumbnail',
             'mood',
             'tags',

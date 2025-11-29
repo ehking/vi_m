@@ -12,7 +12,7 @@
         <a class="btn btn-outline-danger btn-sm" href="{% url 'video-delete' video.pk %}">Delete</a>
         <form method="post" action="{% url 'video-generate' video.pk %}">
             {% csrf_token %}
-            <button class="btn btn-primary btn-sm" type="submit">Generate AI Video</button>
+            <button class="btn btn-primary btn-sm" type="submit" {% if not video.background_video or not video.audio_track.audio_file %}disabled{% endif %}>Generate AI Video</button>
         </form>
     </div>
 </div>
@@ -59,6 +59,14 @@
                 <p><strong>Resolution:</strong> {{ video.resolution|default:'-' }}</p>
                 <p><strong>Aspect Ratio:</strong> {{ video.aspect_ratio|default:'-' }}</p>
                 <p><strong>Error Code:</strong> {{ video.error_code|default:'-' }}</p>
+                <p>
+                    <strong>Background:</strong>
+                    {% if video.background_video %}
+                        <a href="{{ video.background_video.video_file.url }}" target="_blank">{{ video.background_video.title }}</a>
+                    {% else %}
+                        None selected
+                    {% endif %}
+                </p>
                 {% if video.error_message %}
                     <div class="alert alert-danger">Error: {{ video.error_message }}</div>
                 {% endif %}
@@ -81,7 +89,10 @@
                 <h4>Audio Track</h4>
                 <p><a href="{% url 'audio-detail' video.audio_track.pk %}">{{ video.audio_track.title }}</a> by {{ video.audio_track.artist|default:'Unknown' }}</p>
                 <p><strong>Language:</strong> {{ video.audio_track.language|default:'-' }}</p>
-                <p><strong>Lyrics:</strong> {{ video.audio_track.lyrics|truncatechars:150 }}</p>
+                <div class="mt-3">
+                    <strong>Lyrics</strong>
+                    <pre class="bg-light p-3" style="white-space: pre-wrap;">{{ video.audio_track.lyrics|default:'No lyrics provided.' }}</pre>
+                </div>
             </div>
         </div>
         <div class="card mt-3">

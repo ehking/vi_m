@@ -17,8 +17,16 @@
                 <h5 class="mb-0">Essential details</h5>
                 <p class="text-muted small mb-3">Only the must-have fields you need to publish.</p>
             </div>
+            <div class="col-md-6">
+                <label class="form-label" for="id_background_video">Background Video</label>
+                {{ form.background_video }}
+                <div class="form-text">Choose a stock/background video to pair with your audio.</div>
+                {% if form.background_video.errors %}
+                    <div class="text-danger small">{{ form.background_video.errors }}</div>
+                {% endif %}
+            </div>
             {% for field in form %}
-                {% if field.field.required %}
+                {% if field.name != 'background_video' and field.field.required %}
                     <div class="col-md-6">
                         <label class="form-label" for="id_{{ field.name }}">
                             {{ field.label }} <span class="text-danger">*</span>
@@ -47,7 +55,7 @@
                                 <p class="text-muted small">These fields are already set to sensible defaults. Adjust only if you need to override them.</p>
                                 <div class="row g-3">
                                     {% for field in form %}
-                                        {% if not field.field.required %}
+                                        {% if field.name != 'background_video' and not field.field.required %}
                                             <div class="col-md-6">
                                                 <label class="form-label" for="id_{{ field.name }}">{{ field.label }}</label>
                                                 {{ field }}
