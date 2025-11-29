@@ -1,0 +1,43 @@
+{% extends 'videos/base.html' %}
+{% block title %}New AI Job{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between my-4">
+    <div>
+        <h1 class="h3 mb-1">Create AI Job</h1>
+        <p class="text-muted mb-0">Send a prompt and media sources to your selected provider.</p>
+    </div>
+    <a href="{% url 'ai-job-list' %}" class="btn btn-outline-secondary">Back to Jobs</a>
+</div>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Provider</label>
+                    {{ form.provider }}
+                    {% if form.provider.errors %}<div class="text-danger small">{{ form.provider.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Audio Track</label>
+                    {{ form.audio_track }}
+                    {% if form.audio_track.errors %}<div class="text-danger small">{{ form.audio_track.errors }}</div>{% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Background Video (optional)</label>
+                    {{ form.background_video }}
+                    {% if form.background_video.errors %}<div class="text-danger small">{{ form.background_video.errors }}</div>{% endif %}
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Prompt</label>
+                    {{ form.prompt }}
+                    {% if form.prompt.errors %}<div class="text-danger small">{{ form.prompt.errors }}</div>{% endif %}
+                </div>
+            </div>
+            <div class="mt-4 d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">Create &amp; Run</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

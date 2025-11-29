@@ -25,4 +25,7 @@ urlpatterns = [
     path('projects/<int:pk>/', views.VideoProjectDetailView.as_view(), name='project-detail'),
     path('projects/<int:pk>/edit/', views.VideoProjectUpdateView.as_view(), name='project-edit'),
     path('projects/<int:pk>/delete/', views.VideoProjectDeleteView.as_view(), name='project-delete'),
+    path('ai/jobs/', views.AIJobListView.as_view(), name='ai-job-list'),
+    path('ai/jobs/create/', views.ai_job_create_view, name='ai-job-create'),
+    path('ai/jobs/<int:pk>/', views.AIJobDetailView.as_view(), name='ai-job-detail'),
 ]

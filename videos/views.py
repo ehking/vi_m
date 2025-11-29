@@ -6,7 +6,7 @@ from django.contrib.auth.mixins import UserPassesTestMixin
 from django.core.files.base import ContentFile
 from django.db.models import Count, Q
 from django.db.utils import OperationalError
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import (
@@ -23,15 +23,19 @@ from .forms import (
     AudioTrackForm,
     GeneratedVideoForm,
     GeneratedVideoStatusForm,
+    AIVideoJobCreateForm,
     VideoProjectForm,
 )
 from .models import (
     ActivityLog,
+    AIProviderConfig,
+    AIVideoJob,
     AudioTrack,
     GeneratedVideo,
     VideoGenerationLog,
     VideoProject,
 )
+from .services.ai_integration import run_ai_video_job
 from .services.video_generation import (
     VideoGenerationError,
     generate_lyric_video_for_instance,
@@ -546,3 +550,42 @@ class VideoProjectDeleteView(StaffRequiredMixin, DeleteView):
         )
         messages.success(request, 'Project deleted successfully.')
         return super().delete(request, *args, **kwargs)
+
+
+class AIJobListView(ListView):
+    model = AIVideoJob
+    template_name = "videos/ai_job_list.html"
+    context_object_name = "jobs"
+    paginate_by = 20
+
+    def get_queryset(self):
+        return super().get_queryset().select_related("provider", "audio_track", "video")
+
+
+class AIJobDetailView(DetailView):
+    model = AIVideoJob
+    template_name = "videos/ai_job_detail.html"
+    context_object_name = "job"
+
+    def get_queryset(self):
+        return super().get_queryset().select_related("provider", "audio_track", "background_video", "video")
+
+
+def ai_job_create_view(request):
+    if request.method == "POST":
+        form = AIVideoJobCreateForm(request.POST)
+        if form.is_valid():
+            job: AIVideoJob = form.save(commit=False)
+            job.status = AIVideoJob.STATUS_PENDING
+            job.save()
+            messages.info(request, "AI job created. Starting generation...")
+            run_ai_video_job(job.id)
+            return redirect("ai-job-detail", pk=job.pk)
+    else:
+        form = AIVideoJobCreateForm()
+
+    context = {
+        "form": form,
+        "providers": AIProviderConfig.objects.filter(is_active=True),
+    }
+    return render(request, "videos/ai_job_form.html", context)
