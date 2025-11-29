@@ -7,6 +7,7 @@ urlpatterns = [
     path('', RedirectView.as_view(pattern_name='dashboard', permanent=False)),
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
     path('debug/', views.VideoGenerationDebugListView.as_view(), name='debug-list'),
+    path('styles/', views.MusicVideoStyleListView.as_view(), name='music-video-style-list'),
     path('videos/', views.GeneratedVideoListView.as_view(), name='video-list'),
     path('videos/create/', views.GeneratedVideoCreateView.as_view(), name='video-create'),
     path('videos/<int:pk>/', views.GeneratedVideoDetailView.as_view(), name='video-detail'),
