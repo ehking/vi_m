@@ -142,3 +142,68 @@ class ActivityLog(models.Model):
 
     def __str__(self):
         return f"{self.action} - {self.object_type} ({self.object_id})"
+
+
+class AIProviderConfig(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    base_url = models.URLField()
+    endpoint_path = models.CharField(max_length=255)
+    api_key = models.CharField(max_length=255, blank=True)
+    extra_headers = models.TextField(blank=True, help_text="Optional JSON for additional headers")
+    extra_payload = models.TextField(blank=True, help_text="Optional JSON merged into request payload")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class AIVideoJob(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_SUCCESS = "success"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_SUCCESS, "Success"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    provider = models.ForeignKey(AIProviderConfig, on_delete=models.CASCADE, related_name="jobs")
+    audio_track = models.ForeignKey(AudioTrack, on_delete=models.CASCADE, related_name="ai_jobs")
+    background_video = models.ForeignKey(
+        GeneratedVideo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ai_background_jobs",
+    )
+    prompt = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    request_payload = models.TextField(blank=True)
+    response_raw = models.TextField(blank=True)
+    video = models.ForeignKey(
+        GeneratedVideo,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ai_jobs",
+    )
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.provider.name} job #{self.pk}"
+
+    @property
+    def is_finished(self):
+        return self.status in {self.STATUS_SUCCESS, self.STATUS_FAILED}

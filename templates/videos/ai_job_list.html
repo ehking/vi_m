@@ -1,0 +1,66 @@
+{% extends 'videos/base.html' %}
+{% block title %}AI Studio - Jobs{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between my-4">
+    <div>
+        <h1 class="h3 mb-1">AI Studio</h1>
+        <p class="text-muted mb-0">Manage AI video generation jobs across all providers.</p>
+    </div>
+    <a href="{% url 'ai-job-create' %}" class="btn btn-primary">New Job</a>
+</div>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Provider</th>
+                    <th>Audio</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for job in jobs %}
+                    <tr>
+                        <td class="fw-semibold">#{{ job.id }}</td>
+                        <td>{{ job.provider.name }}</td>
+                        <td>{{ job.audio_track.title }}</td>
+                        <td>
+                            <span class="badge text-bg-{% if job.status == 'success' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}warning{% else %}secondary{% endif %}">
+                                {{ job.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ job.created_at|date:"Y-m-d H:i" }}</td>
+                        <td class="text-end">
+                            <a href="{% url 'ai-job-detail' job.pk %}" class="btn btn-outline-primary btn-sm">View</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">No jobs found.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if is_paginated %}
+            <nav aria-label="Job pagination">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                    {% endif %}
+                    <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+                    {% if page_obj.has_next %}
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">Next</span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
