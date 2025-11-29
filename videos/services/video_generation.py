@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import tempfile
 from dataclasses import dataclass
 from typing import List, Optional
@@ -32,12 +33,16 @@ def _append_log(video, entries: List[str]) -> None:
 
 
 def _load_moviepy():
+    install_hint = (
+        "Install dependencies with the same interpreter you use for manage.py, e.g. "
+        f"`{sys.executable} -m pip install -r requirements.txt`."
+    )
     try:
         import moviepy.editor as moviepy_editor
         from moviepy.editor import AudioFileClip, ColorClip, VideoFileClip  # noqa: F401
     except Exception as exc:  # pragma: no cover - exercised via tests
         raise VideoGenerationError(
-            f"MoviePy could not be loaded: {exc}",
+            f"MoviePy could not be loaded: {exc}. {install_hint}",
             code="moviepy_missing",
         ) from exc
 
@@ -45,7 +50,10 @@ def _load_moviepy():
     missing = [attr for attr in required_attrs if not hasattr(moviepy_editor, attr)]
     if missing:
         raise VideoGenerationError(
-            f"MoviePy is installed but missing editor utilities: {', '.join(missing)}.",
+            (
+                "MoviePy is installed but missing editor utilities: "
+                f"{', '.join(missing)}. {install_hint}"
+            ),
             code="moviepy_missing",
         )
 

@@ -1,3 +1,4 @@
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -63,7 +64,13 @@ class GenerateVideoServiceTest(TestCase):
     def test_generate_video_when_moviepy_missing_marks_failure(self):
         video = GeneratedVideo.objects.create(audio_track=self.audio, title="Video Missing MoviePy")
 
-        error = VideoGenerationError("MoviePy could not be loaded: missing", code="moviepy_missing")
+        install_hint = (
+            "Install dependencies with the same interpreter you use for manage.py, e.g. "
+            f"`{sys.executable} -m pip install -r requirements.txt`."
+        )
+        error = VideoGenerationError(
+            f"MoviePy could not be loaded: missing. {install_hint}", code="moviepy_missing"
+        )
         with patch("videos.services.video_generation._load_moviepy", side_effect=error):
             generate_video_for_instance(video)
 
