@@ -1,0 +1,76 @@
+{% extends 'videos/base.html' %}
+{% block title %}AI Job #{{ job.id }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between my-4">
+    <div>
+        <h1 class="h3 mb-1">AI Job #{{ job.id }}</h1>
+        <p class="text-muted mb-0">Provider: {{ job.provider.name }}</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'ai-job-list' %}" class="btn btn-outline-secondary">Back to Jobs</a>
+        <a href="{% url 'ai-job-create' %}" class="btn btn-primary">New Job</a>
+    </div>
+</div>
+<div class="row g-4">
+    <div class="col-lg-7">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Job Details</h5>
+                <dl class="row mb-0">
+                    <dt class="col-sm-4">Provider</dt>
+                    <dd class="col-sm-8">{{ job.provider.name }}</dd>
+                    <dt class="col-sm-4">Audio Track</dt>
+                    <dd class="col-sm-8">{{ job.audio_track.title }}</dd>
+                    <dt class="col-sm-4">Background Video</dt>
+                    <dd class="col-sm-8">{% if job.background_video %}{{ job.background_video.title }}{% else %}<span class="text-muted">None</span>{% endif %}</dd>
+                    <dt class="col-sm-4">Prompt</dt>
+                    <dd class="col-sm-8"><pre class="mb-0 bg-light p-2 rounded small">{{ job.prompt }}</pre></dd>
+                    <dt class="col-sm-4">Status</dt>
+                    <dd class="col-sm-8">
+                        <span class="badge text-bg-{% if job.status == 'success' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}warning{% else %}secondary{% endif %}">{{ job.get_status_display }}</span>
+                    </dd>
+                    <dt class="col-sm-4">Created</dt>
+                    <dd class="col-sm-8">{{ job.created_at|date:"Y-m-d H:i" }}</dd>
+                    <dt class="col-sm-4">Updated</dt>
+                    <dd class="col-sm-8">{{ job.updated_at|date:"Y-m-d H:i" }}</dd>
+                </dl>
+                {% if job.error_message %}
+                    <div class="alert alert-danger mt-3 mb-0">
+                        <strong>Error:</strong> {{ job.error_message }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Request Payload</h5>
+                <pre class="bg-light p-3 rounded small mb-0">{{ job.request_payload|default:"No request captured." }}</pre>
+            </div>
+        </div>
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Response Payload</h5>
+                <pre class="bg-light p-3 rounded small mb-0">{{ job.response_raw|default:"No response captured." }}</pre>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Result</h5>
+                {% if job.video and job.video.video_file %}
+                    <video class="w-100" controls>
+                        <source src="{{ job.video.video_file.url }}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <p class="mt-2 mb-0"><a href="{{ job.video.video_file.url }}" download>Download video</a></p>
+                {% elif job.status == 'failed' %}
+                    <p class="text-danger mb-0">Job failed. Please review error details.</p>
+                {% else %}
+                    <p class="text-muted mb-0">Video will appear here after processing.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
 from django import forms
-from .models import AudioTrack, GeneratedVideo, VideoProject
+from .models import AudioTrack, GeneratedVideo, VideoProject, AIProviderConfig, AIVideoJob
 
 
 class StyledModelForm(forms.ModelForm):
@@ -127,3 +127,40 @@ class VideoProjectForm(StyledModelForm):
         widgets = {
             'videos': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '8'}),
         }
+
+
+class AIProviderConfigForm(StyledModelForm):
+    class Meta:
+        model = AIProviderConfig
+        fields = [
+            'name',
+            'base_url',
+            'endpoint_path',
+            'api_key',
+            'extra_headers',
+            'extra_payload',
+            'is_active',
+        ]
+        widgets = {
+            'extra_headers': forms.Textarea(attrs={'rows': 3}),
+            'extra_payload': forms.Textarea(attrs={'rows': 4}),
+        }
+
+
+class AIVideoJobCreateForm(StyledModelForm):
+    class Meta:
+        model = AIVideoJob
+        fields = [
+            'provider',
+            'audio_track',
+            'background_video',
+            'prompt',
+        ]
+        widgets = {
+            'prompt': forms.Textarea(attrs={'rows': 4}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'provider' in self.fields:
+            self.fields['provider'].queryset = AIProviderConfig.objects.filter(is_active=True)
