@@ -1,11 +1,15 @@
 import logging
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List, Optional
 
 from django.conf import settings
 from django.utils import timezone
+
+try:
+    from moviepy.editor import AudioFileClip, VideoFileClip
+except ModuleNotFoundError:  # pragma: no cover - fallback for minimal installs
+    from moviepy import AudioFileClip, VideoFileClip  # type: ignore
 
 from videos.styles import get_default_prompt_for_style, get_style_label
 
@@ -31,26 +35,6 @@ def _append_log(video, entries: List[str]) -> None:
         video.generation_log = combined_log
 
 
-def _load_moviepy():
-    try:
-        import moviepy.editor as moviepy_editor  # type: ignore
-    except Exception as exc:  # pragma: no cover - handled gracefully
-        raise VideoGenerationError(
-            "MoviePy is not available. Install the 'moviepy' package to enable video generation.",
-            code="moviepy_missing",
-        ) from exc
-
-    required_attrs = ("AudioFileClip", "VideoFileClip")
-    missing = [name for name in required_attrs if not hasattr(moviepy_editor, name)]
-    if missing:
-        raise VideoGenerationError(
-            "MoviePy installation is incomplete; reinstall the 'moviepy' package to restore editor components.",
-            code="moviepy_incomplete",
-        )
-
-    return moviepy_editor
-
-
 def build_final_prompt(video) -> str:
     style_label = get_style_label(getattr(video, "style", ""))
     style_prompt = getattr(video, "style_prompt", "") or get_default_prompt_for_style(
@@ -73,6 +57,56 @@ def build_final_prompt(video) -> str:
     return "\n".join(parts)
 
 
+def _save_processing_state(video):
+    update_fields: List[str] = []
+    if hasattr(video, "status"):
+        video.status = "processing"
+        update_fields.append("status")
+    if hasattr(video, "generation_progress"):
+        video.generation_progress = 0
+        update_fields.append("generation_progress")
+    if hasattr(video, "error_message"):
+        video.error_message = ""
+        update_fields.append("error_message")
+    if hasattr(video, "error_code"):
+        video.error_code = ""
+        update_fields.append("error_code")
+    if hasattr(video, "last_error_message"):
+        video.last_error_message = ""
+        update_fields.append("last_error_message")
+    if hasattr(video, "last_error_at"):
+        video.last_error_at = None
+        update_fields.append("last_error_at")
+
+    if update_fields:
+        video.save(update_fields=update_fields)
+
+
+def _save_failure_state(video, exc: Exception):
+    update_fields: List[str] = []
+    if hasattr(video, "status"):
+        video.status = "failed"
+        update_fields.append("status")
+    if hasattr(video, "error_message"):
+        video.error_message = str(exc)
+        update_fields.append("error_message")
+    if hasattr(video, "last_error_message"):
+        video.last_error_message = str(exc)
+        update_fields.append("last_error_message")
+    if hasattr(video, "last_error_at"):
+        video.last_error_at = timezone.now()
+        update_fields.append("last_error_at")
+    if hasattr(video, "generation_progress"):
+        video.generation_progress = 0
+        update_fields.append("generation_progress")
+    if hasattr(video, "generation_log"):
+        _append_log(video, [f"Generation failed: {exc}"])
+        update_fields.append("generation_log")
+
+    if update_fields:
+        video.save(update_fields=update_fields)
+
+
 def generate_video_for_instance(video):
     """Generate a real MP4 for a GeneratedVideo instance using MoviePy."""
 
@@ -82,169 +116,116 @@ def generate_video_for_instance(video):
         logger.info(message)
         log_entries.append(message)
 
-    logger.info("Starting video generation for GeneratedVideo %s", video.pk)
-
-    video.status = "processing"
-    video.generation_progress = 10
-    video.error_message = ""
-    video.error_code = ""
-    video.last_error_message = ""
-    video.last_error_at = None
-    video.save(
-        update_fields=[
-            "status",
-            "generation_progress",
-            "error_message",
-            "error_code",
-            "last_error_message",
-            "last_error_at",
-        ]
-    )
+    log_step(f"Starting video generation for video {getattr(video, 'pk', '<unsaved>')}")
+    _save_processing_state(video)
 
     try:
-        audio_field = getattr(video, "audio_track", None)
-        audio_file_field = getattr(audio_field, "audio_file", None)
-        if not audio_file_field or not audio_file_field.name:
-            raise VideoGenerationError("Audio file is missing for this video.", code="audio_missing")
+        audio_file_field = getattr(getattr(video, "audio_track", None), "audio_file", None)
+        background_file_field = getattr(getattr(video, "background_video", None), "video_file", None)
 
-        bg_field = getattr(video, "background_video", None)
-        bg_file_field = getattr(bg_field, "video_file", None)
-        if not bg_file_field or not bg_file_field.name:
-            raise VideoGenerationError("Background video is missing for this video.", code="background_missing")
+        if not audio_file_field or not getattr(audio_file_field, "name", None):
+            raise VideoGenerationError("Audio file is missing for this video.")
+        if not background_file_field or not getattr(background_file_field, "name", None):
+            raise VideoGenerationError("Background video is missing for this video.")
 
+        bg_path = os.path.join(settings.MEDIA_ROOT, background_file_field.name)
         audio_path = os.path.join(settings.MEDIA_ROOT, audio_file_field.name)
-        bg_path = os.path.join(settings.MEDIA_ROOT, bg_file_field.name)
 
-        if not os.path.exists(audio_path):
-            raise VideoGenerationError("Audio file not found on disk.", code="audio_missing")
+        logger.debug("Resolved background video path: %s", bg_path)
+        logger.debug("Resolved audio track path: %s", audio_path)
+
         if not os.path.exists(bg_path):
-            raise VideoGenerationError("Background video file not found on disk.", code="background_missing")
+            raise FileNotFoundError(f"Background video file not found at: {bg_path}")
+        if not os.path.exists(audio_path):
+            raise FileNotFoundError(f"Audio file not found at: {audio_path}")
 
-        log_step(f"Loading background video from {bg_path}")
-        log_step(f"Loading audio from {audio_path}")
+        output_dir = os.path.join(settings.MEDIA_ROOT, "generated_videos")
+        os.makedirs(output_dir, exist_ok=True)
+        output_filename = f"generated_{video.id}.mp4"
+        output_path = os.path.join(output_dir, output_filename)
 
-        editor = _load_moviepy()
-        AudioFileClip = getattr(editor, "AudioFileClip")
-        VideoFileClip = getattr(editor, "VideoFileClip")
-
-        bg_clip = None
-        audio_clip = None
+        log_step(f"Loading background clip from {bg_path}")
         final_clip = None
-        trimmed_bg = None
-        trimmed_audio = None
+        width = height = None
+        with VideoFileClip(bg_path) as bg_clip, AudioFileClip(audio_path) as audio_clip:
+            log_step("Media clips loaded; trimming to matching duration")
+            duration = min(bg_clip.duration or 0, audio_clip.duration or 0)
+            if not duration or duration <= 0:
+                raise VideoGenerationError("Unable to determine duration for composition.")
 
-        try:
-            bg_clip = VideoFileClip(bg_path)
-            audio_clip = AudioFileClip(audio_path)
+            bg_clip = bg_clip.subclip(0, duration)
+            audio_clip = audio_clip.subclip(0, duration)
+            width, height = int(bg_clip.w), int(bg_clip.h)
+            final_clip = bg_clip.set_audio(audio_clip)
 
-            bg_duration = float(bg_clip.duration or 0)
-            audio_duration = float(audio_clip.duration or 0)
-            duration = min(bg_duration, audio_duration)
-
-            if duration <= 0:
-                raise VideoGenerationError("Unable to determine duration for composition.", code="duration_invalid")
-
-            trimmed_bg = bg_clip.subclip(0, duration)
-            trimmed_audio = audio_clip.subclip(0, duration)
-            final_clip = trimmed_bg.set_audio(trimmed_audio).set_duration(duration)
-
-            output_dir = Path(settings.MEDIA_ROOT) / "generated_videos"
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            output_relative = f"generated_videos/generated_{video.id}.mp4"
-            output_full_path = os.path.join(settings.MEDIA_ROOT, output_relative)
-
-            log_step(f"Writing composed video to {output_full_path}")
+            log_step(f"Writing combined video to {output_path}")
             final_clip.write_videofile(
-                output_full_path,
-                fps=bg_clip.fps or 24,
+                output_path,
+                fps=24,
                 codec="libx264",
                 audio_codec="aac",
-                verbose=False,
-                logger=None,
             )
-        finally:
-            if final_clip:
-                final_clip.close()
-            if bg_clip:
-                bg_clip.close()
-            if audio_clip:
-                audio_clip.close()
 
-        if not os.path.exists(output_full_path):
-            raise VideoGenerationError("Generated video file was not created.", code="output_missing")
+        if final_clip:
+            final_clip.close()
 
-        video.video_file.name = output_relative
-        video.file_size_bytes = os.path.getsize(output_full_path)
-        video.duration_seconds = int(duration)
-        video.resolution = f"{int(trimmed_bg.w)}x{int(trimmed_bg.h)}"
-        video.aspect_ratio = f"{int(trimmed_bg.w)}:{int(trimmed_bg.h)}"
-        video.status = "ready"
-        video.generation_progress = 100
-        video.generation_time_ms = video.generation_time_ms or 0
-        video.last_error_message = ""
-        video.last_error_at = None
+        log_step(f"Finished writing video to {output_path}")
 
-        log_step("Video generation succeeded")
-        _append_log(video, log_entries)
-        video.save(
-            update_fields=[
+        if not os.path.exists(output_path):
+            raise VideoGenerationError("Generated video file was not created.")
+
+        relative_output = os.path.join("generated_videos", output_filename)
+        if hasattr(video, "video_file"):
+            video.video_file.name = relative_output
+        if hasattr(video, "duration_seconds"):
+            video.duration_seconds = int(duration)
+        if hasattr(video, "status"):
+            video.status = "ready"
+        if hasattr(video, "last_error_message"):
+            video.last_error_message = ""
+        if hasattr(video, "last_error_at"):
+            video.last_error_at = None
+        if hasattr(video, "generation_progress"):
+            video.generation_progress = 100
+        if hasattr(video, "file_size_bytes"):
+            video.file_size_bytes = os.path.getsize(output_path)
+        if hasattr(video, "resolution") and width is not None and height is not None:
+            video.resolution = f"{width}x{height}"
+        if hasattr(video, "aspect_ratio") and width is not None and height is not None:
+            video.aspect_ratio = f"{width}:{height}"
+
+        update_fields = [
+            field
+            for field in [
                 "video_file",
-                "file_size_bytes",
                 "duration_seconds",
+                "status",
+                "last_error_message",
+                "last_error_at",
+                "generation_progress",
+                "file_size_bytes",
                 "resolution",
                 "aspect_ratio",
-                "status",
-                "generation_progress",
-                "generation_time_ms",
                 "generation_log",
-                "last_error_message",
-                "last_error_at",
             ]
-        )
+            if hasattr(video, field)
+        ]
+        if hasattr(video, "generation_log"):
+            log_entries.append("Video generation completed successfully.")
+            _append_log(video, log_entries)
+
+        video.save(update_fields=update_fields)
+
+        log_step(f"Video generation succeeded for video {getattr(video, 'pk', '<unsaved>')}")
         return video
 
-    except VideoGenerationError as exc:
-        log_step(f"Generation failed: {exc}")
-        _append_log(video, log_entries)
-        video.status = "failed"
-        video.error_message = str(exc)
-        video.error_code = exc.code
-        video.last_error_message = str(exc)
-        video.last_error_at = timezone.now()
-        video.generation_progress = 0
-        video.save(
-            update_fields=[
-                "status",
-                "error_message",
-                "error_code",
-                "last_error_message",
-                "last_error_at",
-                "generation_progress",
-                "generation_log",
-            ]
-        )
-        return video
-    except Exception as exc:  # pragma: no cover - defensive catch
-        logger.exception("Unexpected error during video generation")
-        log_step(f"Generation failed: {exc}")
-        _append_log(video, log_entries)
-        video.status = "failed"
-        video.error_message = str(exc)
-        video.last_error_message = str(exc)
-        video.last_error_at = timezone.now()
-        video.generation_progress = 0
-        video.save(
-            update_fields=[
-                "status",
-                "error_message",
-                "last_error_message",
-                "last_error_at",
-                "generation_progress",
-                "generation_log",
-            ]
-        )
-        return video
+    except Exception as exc:  # pragma: no cover - surface errors to caller
+        logger.exception("Video generation failed for video %s", getattr(video, "pk", "<unsaved>"))
+        if hasattr(video, "generation_log"):
+            log_entries.append(f"Generation failed: {exc}")
+            _append_log(video, log_entries)
+        _save_failure_state(video, exc)
+        raise
 
 
 def generate_lyric_video_for_instance(video):
@@ -266,9 +247,7 @@ def generate_lyric_video_for_instance(video):
         video.generation_progress = 10
         video.error_message = ""
         video.last_error_message = ""
-        video.save(
-            update_fields=["status", "generation_progress", "error_message", "last_error_message"]
-        )
+        video.save(update_fields=["status", "generation_progress", "error_message", "last_error_message"])
 
         audio_track = getattr(video, "audio_track", None)
         audio_file_field = getattr(audio_track, "audio_file", None)
@@ -290,14 +269,19 @@ def generate_lyric_video_for_instance(video):
         log_step(f"Loading audio from {audio_path}")
         log_step(f"Loading background video from {bg_path}")
 
-        from moviepy.editor import AudioFileClip, CompositeVideoClip, TextClip, VideoFileClip
+        try:
+            from moviepy.editor import AudioFileClip as MPYAudioFileClip
+            from moviepy.editor import CompositeVideoClip, TextClip, VideoFileClip as MPYVideoFileClip
+        except ModuleNotFoundError:  # pragma: no cover - fallback for minimal installs
+            from moviepy import AudioFileClip as MPYAudioFileClip  # type: ignore
+            from moviepy import CompositeVideoClip, TextClip, VideoFileClip as MPYVideoFileClip  # type: ignore
 
         audio_clip = None
         bg_clip = None
         final_clip = None
         try:
-            audio_clip = AudioFileClip(audio_path)
-            bg_clip = VideoFileClip(bg_path).resize((1280, 720))
+            audio_clip = MPYAudioFileClip(audio_path)
+            bg_clip = MPYVideoFileClip(bg_path).resize((1280, 720))
 
             duration = min(bg_clip.duration or 0, audio_clip.duration or 0) or audio_clip.duration or bg_clip.duration or 0
             duration = float(duration)
@@ -389,4 +373,4 @@ def generate_lyric_video_for_instance(video):
                 "generation_log",
             ]
         )
-        return video
+        raise
